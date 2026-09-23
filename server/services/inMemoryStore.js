@@ -17,8 +17,8 @@ export function isMemoryMode() {
 }
 
 export async function seedMemoryStore() {
-  // TODO: Seed the demo founder account with a hashed password when the store is empty.
-  if (users.length === 0) {
+  const existing = memory.findUserByEmail("founder@example.com");
+  if (!existing) {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash("password123", salt);
     const demoUser = {
@@ -34,6 +34,7 @@ export async function seedMemoryStore() {
   }
 }
 
+
 export const memory = {
   users,
   projects,
@@ -48,11 +49,14 @@ export const memory = {
     // TODO: Find the user with this id.
     return users.find((u) => u.id === id || u._id === id) || null;
   },
-  createUser: async ({ name, email, password }) => {
-    // TODO: Push a user with a generated id and a bcrypt password hash.
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+  createUser: async ({ name, email, password, passwordHash }) => {
+    let hash = passwordHash;
+    if (!hash && password) {
+      const salt = await bcrypt.genSalt(10);
+      hash = await bcrypt.hash(password, salt);
+    }
     const id = randomUUID();
+
     const newUser = {
       _id: id,
       id,

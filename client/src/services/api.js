@@ -1,4 +1,5 @@
 import axios from "axios";
+import { useStudioStore } from "../store/useStudioStore.js";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -9,21 +10,47 @@ const api = axios.create({
   }
 });
 
-// Phase 1: API foundation health check
+// Request interceptor: attach Authorization Bearer token when available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("avs_token");
+  if (token && token !== "null" && token !== "undefined") {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response interceptor: handle 401 Unauthorized for authenticated endpoints
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isAuthAttempt =
+      error.config?.url?.includes("/auth/login") ||
+      error.config?.url?.includes("/auth/register");
+
+    if (error.response?.status === 401 && !isAuthAttempt) {
+      useStudioStore.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Health check endpoint
 export const getHealth = async () => {
   const response = await api.get("/health");
   return response.data;
 };
 
-// Placeholder API stubs for future phases (Phase 2+)
+// Phase 2: Authentication API
+export const authApi = {
+  register: (payload) => api.post("/auth/register", payload).then((res) => res.data),
+  login: (payload) => api.post("/auth/login", payload).then((res) => res.data),
+  me: () => api.get("/auth/me").then((res) => res.data)
+};
+
+// Placeholder API stubs for future phases (Phase 3+)
 function notImplemented(name) {
   return Promise.reject(new Error(`${name} is deferred to future phases`));
 }
-
-export const authApi = {
-  register: () => notImplemented("authApi.register"),
-  login: () => notImplemented("authApi.login")
-};
 
 export const projectApi = {
   list: () => notImplemented("projectApi.list"),
@@ -45,4 +72,3 @@ export const analyticsApi = {
 };
 
 export default api;
-

@@ -1,32 +1,44 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
-import { isMemoryMode, memory } from "../services/inMemoryStore.js";
+import { authService } from "../services/authService.js";
 
 export async function requireAuth(req, res, next) {
-  // TODO: Read the Bearer token, reject with 401 when it is missing or invalid, verify it,
-  // TODO: load the user from the memory store or MongoDB, and set req.user.
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Authentication required" });
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+
+  if (!token || token === "null" || token === "undefined") {
+    return res.status(401).json({
+      ok: false,
+      message: "Authentication required",
+      status: 401
+    });
   }
 
-  const token = authHeader.split(" ")[1];
+
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "replace-me");
-    let user = null;
-    if (isMemoryMode()) {
-      user = memory.findUserById(decoded.id);
-    } else {
-      user = await User.findById(decoded.id).select("-passwordHash");
-    }
+    const secret = process.env.JWT_SECRET || "replace-me";
+    const decoded = jwt.verify(token, secret);
 
+    const user = await authService.findUserById(decoded.id);
     if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      return res.status(401).json({
+        ok: false,
+        message: "User not found or session expired",
+        status: 401
+      });
     }
 
-    req.user = user;
+    req.user = {
+      id: user.id || user._id,
+      name: user.name,
+      email: user.email
+    };
+
     next();
-  } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+  } catch (_error) {
+    return res.status(401).json({
+      ok: false,
+      message: "Invalid or expired authentication token",
+      status: 401
+    });
   }
 }

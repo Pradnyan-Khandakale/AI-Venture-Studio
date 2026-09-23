@@ -1,26 +1,49 @@
 import { create } from "zustand";
 
-const savedToken = localStorage.getItem("avs_token") || null;
-const savedUser = JSON.parse(localStorage.getItem("avs_user") || "null");
+function getInitialAuth() {
+  const token = localStorage.getItem("avs_token") || null;
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem("avs_user") || "null");
+  } catch (_e) {
+    user = null;
+  }
+  return {
+    token,
+    user,
+    isAuthenticated: Boolean(token && user)
+  };
+}
 
 export const useStudioStore = create((set) => ({
   selectedProject: null,
-  // TODO: Restore the saved avs_token and avs_user from localStorage.
-  auth: {
-    token: savedToken,
-    user: savedUser
-  },
+  auth: getInitialAuth(),
   setSelectedProject: (project) => set({ selectedProject: project }),
   setAuth: ({ token, user }) => {
-    // TODO: Persist the token and user in localStorage and store the session.
     if (token) localStorage.setItem("avs_token", token);
     if (user) localStorage.setItem("avs_user", JSON.stringify(user));
-    set({ auth: { token, user } });
+    set({
+      auth: {
+        token: token || null,
+        user: user || null,
+        isAuthenticated: Boolean(token && user)
+      }
+    });
   },
   logout: () => {
-    // TODO: Clear the stored session and reset the auth state and selected project.
+
     localStorage.removeItem("avs_token");
     localStorage.removeItem("avs_user");
-    set({ auth: { token: null, user: null }, selectedProject: null });
+    set({
+      auth: {
+        token: null,
+        user: null,
+        isAuthenticated: false
+      },
+      selectedProject: null
+    });
+  },
+  restoreSession: () => {
+    set({ auth: getInitialAuth() });
   }
 }));
