@@ -1,108 +1,101 @@
-import { BarChart3, BrainCircuit, Download, FileText, LayoutDashboard, LogOut, Mail, Rocket } from "lucide-react";
-import { useState } from "react";
-import AuthPage from "./pages/AuthPage";
-import DashboardPage from "./pages/DashboardPage";
-import ProjectPage from "./pages/ProjectPage";
-import BoardroomPage from "./pages/BoardroomPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
-import { Button } from "./components/ui/Button";
-import { useStudioStore } from "./store/useStudioStore";
-
-const tabs = [
-  { id: "dashboard", label: "Projects", icon: LayoutDashboard },
-  { id: "studio", label: "Studio", icon: Rocket },
-  { id: "boardroom", label: "Boardroom", icon: BrainCircuit },
-  { id: "analytics", label: "Analytics", icon: BarChart3 }
-];
+import React, { useEffect } from "react";
+import { Activity, RefreshCw } from "lucide-react";
+import { getHealth, API_BASE_URL } from "./services/api.js";
+import { useAppStore } from "./store/useAppStore.js";
+import { Button } from "./components/ui/Button.jsx";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const { auth, logout } = useStudioStore();
+  const {
+    backendStatus,
+    databaseMode,
+    healthData,
+    isLoadingHealth,
+    error,
+    setHealthData,
+    setHealthError,
+    setIsLoadingHealth
+  } = useAppStore();
 
-  if (!auth.token) return <AuthPage />;
-
-  const renderPage = () => {
-    if (activeTab === "studio") return <ProjectPage />;
-    if (activeTab === "boardroom") return <BoardroomPage />;
-    if (activeTab === "analytics") return <AnalyticsPage />;
-    return <DashboardPage onOpenStudio={() => setActiveTab("studio")} />;
+  const checkBackendHealth = async () => {
+    setIsLoadingHealth(true);
+    try {
+      setHealthData(await getHealth());
+    } catch (err) {
+      setHealthError(err);
+    } finally {
+      setIsLoadingHealth(false);
+    }
   };
 
-  return (
-    <div className="min-h-screen">
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-border bg-white/80 px-4 py-5 backdrop-blur lg:block">
-        <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white">
-            <Rocket size={20} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Studio</p>
-            <h1 className="text-lg font-bold">AI Venture</h1>
-          </div>
-        </div>
-        <nav className="space-y-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition ${
-                  activeTab === tab.id ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-muted"
-                }`}
-              >
-                <Icon size={18} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="absolute bottom-5 left-4 right-4 space-y-2">
-          <div className="rounded-lg border border-border bg-white p-3 text-xs text-muted-foreground">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
-              <FileText size={15} />
-              Export stack
-            </div>
-            PDF, Markdown, JSON, and email delivery are wired through the backend.
-          </div>
-          <Button variant="ghost" className="w-full justify-start" onClick={logout}>
-            <LogOut size={16} />
-            Sign out
-          </Button>
-        </div>
-      </aside>
+  useEffect(() => {
+    checkBackendHealth();
+  }, []);
 
-      <main className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-white/80 px-4 py-3 backdrop-blur lg:hidden">
-          <div className="flex items-center gap-2 font-bold">
-            <Rocket size={19} />
-            AI Venture Studio
+  const statuses = [
+    { label: "Frontend Runtime", value: "React 18.3 / Vite 6.0", state: "Running", ok: true },
+    { label: "Tailwind CSS", value: "Utilities & Tokens Active", state: "Verified", ok: true },
+    { label: "Environment", value: `VITE_API_URL: ${API_BASE_URL}`, state: "Loaded", ok: true },
+    {
+      label: "Backend & Database",
+      value: `Mode: ${databaseMode || "connecting..."}`,
+      state: backendStatus === "connected" ? "Connected" : isLoadingHealth ? "Checking..." : "Offline",
+      ok: backendStatus === "connected"
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-6 sm:p-10 font-sans">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <header className="flex items-center justify-between border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-teal-700 flex items-center justify-center text-white">
+              <Activity size={20} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">AI Venture Studio</h1>
+              <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">Phase 1: Foundation</p>
+            </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={logout} title="Sign out">
-            <LogOut size={18} />
+          <Button variant="secondary" size="sm" onClick={checkBackendHealth} disabled={isLoadingHealth}>
+            <RefreshCw size={13} className={isLoadingHealth ? "animate-spin" : ""} />
+            Recheck
           </Button>
         </header>
-        <div className="border-b border-border bg-white/60 px-4 py-2 lg:hidden">
-          <div className="grid grid-cols-4 gap-1">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex h-10 items-center justify-center rounded-md ${
-                    activeTab === tab.id ? "bg-slate-900 text-white" : "text-slate-600"
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {statuses.map((item) => (
+            <div key={item.label} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-1">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-700">{item.label}</span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                    item.ok
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border-rose-200"
                   }`}
-                  title={tab.label}
                 >
-                  <Icon size={18} />
-                </button>
-              );
-            })}
-          </div>
+                  {item.state}
+                </span>
+              </div>
+              <p className="text-xs font-mono text-slate-600 truncate">{item.value}</p>
+            </div>
+          ))}
         </div>
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{renderPage()}</div>
-      </main>
+
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-2">
+          <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
+            <span>Health Endpoint Diagnostics</span>
+            <code className="text-slate-400">GET /api/health</code>
+          </div>
+          <pre className="bg-slate-900 text-slate-100 p-3 rounded text-xs font-mono overflow-x-auto">
+            {healthData ? JSON.stringify(healthData, null, 2) : error ? `Error: ${error}` : "Checking..."}
+          </pre>
+        </section>
+
+        <p className="text-xs text-slate-500 text-center">
+          Phase 1 Foundation active. Auth, Projects, AI Engine, and Boardroom will build additively in subsequent phases.
+        </p>
+      </div>
     </div>
   );
 }
