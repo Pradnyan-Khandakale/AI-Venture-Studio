@@ -53,9 +53,9 @@ function notImplemented(name) {
 }
 
 export const projectApi = {
-  list: () => notImplemented("projectApi.list"),
-  create: () => notImplemented("projectApi.create"),
-  get: () => notImplemented("projectApi.get"),
+  list: () => api.get("/projects").then((res) => res.data),
+  create: (payload) => api.post("/projects", payload).then((res) => res.data),
+  get: (id) => api.get(`/projects/${id}`).then((res) => res.data),
   run: () => notImplemented("projectApi.run"),
   approve: () => notImplemented("projectApi.approve"),
   regenerate: () => notImplemented("projectApi.regenerate"),

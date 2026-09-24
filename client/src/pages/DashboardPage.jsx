@@ -21,18 +21,37 @@ export default function DashboardPage({ onOpenStudio }) {
   const [form, setForm] = useState(emptyIdea);
   const queryClient = useQueryClient();
   const setSelectedProject = useStudioStore((state) => state.setSelectedProject);
-  // TODO: Load the project list with useQuery("projects", projectApi.list).
-  const data = [];
-  const isLoading = false;
 
-  // TODO: Create the project with useMutation(projectApi.create) and, on success, select
-  // TODO: it, invalidate the "projects" query, reset the form, and open the studio tab.
-  const createProject = useMutation(() => Promise.resolve(null));
+  const { data = [], isLoading, isError, error } = useQuery("projects", projectApi.list);
+
+  const createProject = useMutation(projectApi.create, {
+    onSuccess: (newProject) => {
+      setSelectedProject(newProject);
+      queryClient.invalidateQueries("projects");
+      setForm(emptyIdea);
+      if (onOpenStudio) {
+        onOpenStudio(newProject);
+      }
+    }
+  });
 
   const submit = (event) => {
     event.preventDefault();
-    // TODO: Submit the new project through the mutation above.
+    if (!form.startupName.trim() || !form.idea.trim() || !form.industry.trim() || !form.targetUsers.trim()) {
+      return;
+    }
+    createProject.mutate({
+      startupName: form.startupName.trim(),
+      idea: form.idea.trim(),
+      industry: form.industry.trim(),
+      targetUsers: form.targetUsers.trim(),
+      country: form.country?.trim() || "United States",
+      budget: form.budget?.trim() || "",
+      timeline: form.timeline?.trim() || ""
+    });
   };
+
+  const projectList = Array.isArray(data) ? data : [];
 
   return (
     <div className="space-y-6">
@@ -45,30 +64,46 @@ export default function DashboardPage({ onOpenStudio }) {
           </p>
         </div>
         <Card className="p-5">
-          <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-            <Input label="Startup Name" value={form.startupName} onChange={(value) => setForm({ ...form, startupName: value })} required />
-            <Input label="Industry" value={form.industry} onChange={(value) => setForm({ ...form, industry: value })} required />
-            <Input label="Target Users" value={form.targetUsers} onChange={(value) => setForm({ ...form, targetUsers: value })} required />
-            <Input label="Country" value={form.country} onChange={(value) => setForm({ ...form, country: value })} />
-            <Input label="Budget" value={form.budget} onChange={(value) => setForm({ ...form, budget: value })} />
-            <Input label="Timeline" value={form.timeline} onChange={(value) => setForm({ ...form, timeline: value })} />
+          <form id="create-project-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+            {[
+              { key: "startupName", id: "startup-name-input", label: "Startup Name *", required: true },
+              { key: "industry", id: "industry-input", label: "Industry *", required: true },
+              { key: "targetUsers", id: "target-users-input", label: "Target Users *", required: true },
+              { key: "country", id: "country-input", label: "Country" },
+              { key: "budget", id: "budget-input", label: "Budget", placeholder: "e.g. $50,000" },
+              { key: "timeline", id: "timeline-input", label: "Timeline", placeholder: "e.g. 6 months" }
+            ].map((f) => (
+              <label key={f.key} className="block text-sm font-medium">
+                {f.label}
+                <input
+                  id={f.id}
+                  className="mt-1 h-10 w-full rounded-md border border-border px-3 outline-none focus:ring-2 focus:ring-teal-600"
+                  value={form[f.key]}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                  required={f.required}
+                />
+              </label>
+            ))}
             <label className="block text-sm font-medium sm:col-span-2">
-              Startup Idea
+              Startup Idea *
               <textarea
+                id="idea-input"
                 className="mt-1 min-h-28 w-full rounded-md border border-border px-3 py-2 outline-none focus:ring-2 focus:ring-teal-600"
                 value={form.idea}
                 onChange={(event) => setForm({ ...form, idea: event.target.value })}
+                placeholder="Describe the startup value proposition, problem solved, and core innovation..."
                 required
               />
             </label>
             {createProject.isError && (
-              <p className="sm:col-span-2 text-sm font-medium text-rose-600">
-                {createProject.error?.response?.data?.message || "Project creation failed. Please sign in again and retry."}
+              <p id="create-project-error" className="sm:col-span-2 text-sm font-medium text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-md">
+                {createProject.error?.response?.data?.message || createProject.error?.message || "Project creation failed. Please check fields and retry."}
               </p>
             )}
-            <Button className="sm:col-span-2" disabled={createProject.isLoading}>
+            <Button id="create-project-submit-btn" className="sm:col-span-2" disabled={createProject.isLoading}>
               <Plus size={17} />
-              {createProject.isLoading ? "Creating..." : "Create project"}
+              {createProject.isLoading ? "Creating venture..." : "Create project"}
             </Button>
           </form>
         </Card>
@@ -79,61 +114,68 @@ export default function DashboardPage({ onOpenStudio }) {
           <h3 className="text-xl font-bold">Projects</h3>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Search size={16} />
-            {data.length} total
+            <span id="projects-count">{projectList.length} total</span>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {isLoading && <Card className="p-5 text-sm text-muted-foreground">Loading projects...</Card>}
-          {data.map((project) => (
-            <Card key={project._id} className="p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <h4 className="font-bold">{project.startupName}</h4>
-                  <p className="mt-1 text-sm text-muted-foreground">{project.industry}</p>
+        <div id="projects-grid" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {isLoading && (
+            <Card className="p-8 text-center text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+              Loading projects...
+            </Card>
+          )}
+          {isError && (
+            <Card className="p-8 text-center text-sm text-rose-600 md:col-span-2 xl:col-span-3">
+              Failed to load projects: {error?.response?.data?.message || error?.message || "Server error"}
+            </Card>
+          )}
+          {!isLoading && !isError && projectList.length === 0 && (
+            <Card className="p-8 text-center text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+              No startup projects found. Submit your first venture concept using the form above to get started.
+            </Card>
+          )}
+          {projectList.map((project) => (
+            <Card key={project._id || project.id} className="p-5 flex flex-col justify-between">
+              <div>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-slate-900">{project.startupName}</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">{project.industry}</p>
+                  </div>
+                  <Badge tone={project.status === "completed" ? "completed" : project.status === "failed" ? "failed" : project.status === "running" ? "running" : "pending"}>
+                    {project.status || "draft"}
+                  </Badge>
                 </div>
-                <Badge tone={project.status === "completed" ? "completed" : project.status === "failed" ? "failed" : "running"}>
-                  {project.status}
-                </Badge>
+                <p className="line-clamp-3 min-h-16 text-sm text-slate-600">{project.idea}</p>
               </div>
-              <p className="line-clamp-3 min-h-16 text-sm text-slate-600">{project.idea}</p>
-              <div className="mt-5 flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Sparkles size={16} />
-                  Score {project.startupScore?.overall || 0}
-                </span>
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <CalendarClock size={16} />
-                  {new Date(project.updatedAt).toLocaleDateString()}
-                </span>
+              <div>
+                <div className="mt-5 flex items-center justify-between text-sm border-t border-slate-100 pt-3">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <Sparkles size={16} />
+                    Score {project.startupScore?.overall || 0}
+                  </span>
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarClock size={16} />
+                    {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : "Just now"}
+                  </span>
+                </div>
+                <Button
+                  id={`open-project-${project._id || project.id}`}
+                  className="mt-4 w-full"
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedProject(project);
+                    if (onOpenStudio) {
+                      onOpenStudio(project);
+                    }
+                  }}
+                >
+                  Open studio
+                </Button>
               </div>
-              <Button
-                className="mt-4 w-full"
-                variant="secondary"
-                onClick={() => {
-                  setSelectedProject(project);
-                  onOpenStudio();
-                }}
-              >
-                Open studio
-              </Button>
             </Card>
           ))}
         </div>
       </section>
     </div>
-  );
-}
-
-function Input({ label, value, onChange, ...props }) {
-  return (
-    <label className="block text-sm font-medium">
-      {label}
-      <input
-        className="mt-1 h-10 w-full rounded-md border border-border px-3 outline-none focus:ring-2 focus:ring-teal-600"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        {...props}
-      />
-    </label>
   );
 }

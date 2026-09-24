@@ -1,112 +1,130 @@
-import { Check, Download, Mail, Play, RefreshCw } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "react-query";
-import { HealthScore } from "../components/dashboard/HealthScore";
-import { ReportsPanel } from "../components/reports/ReportsPanel";
-import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
-import { WorkflowGraph } from "../components/workflow/WorkflowGraph";
-import { projectApi } from "../services/api";
-import { useStudioStore } from "../store/useStudioStore";
+import React from "react";
+import { ArrowLeft, CalendarClock, Layers, ShieldCheck, Building2, Users, Globe, DollarSign, Clock } from "lucide-react";
+import { useQuery } from "react-query";
+import { Badge } from "../components/ui/Badge.jsx";
+import { Button } from "../components/ui/Button.jsx";
+import { Card } from "../components/ui/Card.jsx";
+import { projectApi } from "../services/api.js";
+import { useStudioStore } from "../store/useStudioStore.js";
 
-export default function ProjectPage() {
-  const selectedProject = useStudioStore((state) => state.selectedProject);
-  const setSelectedProject = useStudioStore((state) => state.setSelectedProject);
-  const queryClient = useQueryClient();
-  const id = selectedProject?._id;
+export default function ProjectPage({ onBack }) {
+  const selectedProjectId = useStudioStore((state) => state.selectedProjectId);
 
-  // TODO: Poll the project with useQuery(["project", id], () => projectApi.get(id)) while a
-  // TODO: project is selected and keep the store in sync through onSuccess.
-  const project = selectedProject;
+  const { data: project, isLoading, isError, error } = useQuery(
+    ["project", selectedProjectId],
+    () => projectApi.get(selectedProjectId),
+    { enabled: Boolean(selectedProjectId) }
+  );
 
-  const refreshProject = (updated) => {
-    // TODO: Store the updated project and invalidate the ["project", id] and "projects" queries.
-  };
-
-  // TODO: Wire these to projectApi.run, approve, regenerate, and email, refreshing the
-  // TODO: project after each successful call.
-  const run = useMutation(() => Promise.resolve(null));
-  const approve = useMutation(() => Promise.resolve(null));
-  const regenerate = useMutation(() => Promise.resolve(null));
-  const email = useMutation(() => Promise.resolve(null));
-
-  if (!project) {
+  if (isLoading) {
     return (
-      <Card className="p-8 text-center">
-        <h2 className="text-2xl font-bold">No project selected</h2>
-        <p className="mt-2 text-muted-foreground">Create or open a project from the dashboard.</p>
+      <Card className="p-8 text-center text-sm text-muted-foreground">
+        Loading venture workspace...
       </Card>
     );
   }
 
-  const currentAgent = project.agentRuns?.find((agent) => agent.status === "completed" && !agent.approved);
+  if (isError || !project) {
+    return (
+      <Card className="p-8 text-center space-y-4">
+        <h2 className="text-xl font-bold text-slate-800">Project Not Found</h2>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          {error?.response?.data?.message || "The requested project could not be found or does not belong to your account."}
+        </p>
+        <Button id="back-to-projects-error-btn" variant="secondary" onClick={onBack}>
+          <ArrowLeft size={16} /> Return to Projects
+        </Button>
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-teal-700">Active venture</p>
-          <h2 className="text-3xl font-bold">{project.startupName}</h2>
-          <p className="mt-2 max-w-3xl text-muted-foreground">{project.idea}</p>
+    <div id="project-workspace-shell" className="space-y-6">
+      {/* Workspace Header */}
+      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Button
+              id="back-to-dashboard-btn"
+              variant="secondary"
+              size="sm"
+              onClick={onBack}
+              className="text-xs"
+            >
+              <ArrowLeft size={14} /> Back to Projects
+            </Button>
+            <Badge tone={project.status === "completed" ? "completed" : project.status === "failed" ? "failed" : project.status === "running" ? "running" : "pending"}>
+              {project.status || "draft"}
+            </Badge>
+          </div>
+          <h2 id="project-name-heading" className="text-3xl font-bold tracking-tight text-slate-900 pt-1">
+            {project.startupName}
+          </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => run.mutate(false)} disabled={run.isLoading}>
-            <Play size={17} />
-            Run next
-          </Button>
-          <Button variant="secondary" onClick={() => run.mutate(true)} disabled={run.isLoading}>
-            <RefreshCw size={17} />
-            Auto mode
-          </Button>
-          <Button as="a" variant="secondary" onClick={() => window.open(projectApi.export(project._id, "pdf"), "_blank")}>
-            <Download size={17} />
-            PDF
-          </Button>
-          <Button variant="secondary" onClick={() => window.open(projectApi.export(project._id, "markdown"), "_blank")}>
-            <Download size={17} />
-            MD
-          </Button>
-          <Button variant="secondary" onClick={() => window.open(projectApi.export(project._id, "json"), "_blank")}>
-            <Download size={17} />
-            JSON
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const address = window.prompt("Email address for the venture report");
-              if (address) email.mutate(address);
-            }}
-            disabled={email.isLoading}
-          >
-            <Mail size={17} />
-            Email
-          </Button>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
+            <CalendarClock size={14} className="text-teal-700" />
+            Last updated: {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : "Recent"}
+          </span>
         </div>
       </section>
 
-      {currentAgent && (
-        <Card className="flex flex-col gap-3 border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold">Approval needed: {currentAgent.name}</h3>
-            <p className="text-sm text-amber-800">Approve the report to unlock the next agent, or regenerate it.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => approve.mutate(currentAgent.key)} disabled={approve.isLoading}>
-              <Check size={17} />
-              Approve
-            </Button>
-            <Button variant="secondary" onClick={() => regenerate.mutate(currentAgent.key)} disabled={regenerate.isLoading}>
-              <RefreshCw size={17} />
-              Regenerate
-            </Button>
-          </div>
-        </Card>
-      )}
+      {/* Core Venture Specification Card */}
+      <Card className="p-6 space-y-5">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-teal-700">Venture Concept & Idea</h3>
+          <p id="project-idea-text" className="mt-2 text-slate-800 text-sm leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-100">
+            {project.idea}
+          </p>
+        </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-        <WorkflowGraph agents={project.agentRuns || []} />
-        <HealthScore score={project.startupScore} />
-      </div>
-      <ReportsPanel project={project} />
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Project Metadata</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><Building2 size={14} className="text-slate-500" /> Industry</span>
+              <p id="project-industry-val" className="font-semibold text-slate-800 text-sm">{project.industry}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><Users size={14} className="text-slate-500" /> Target Users</span>
+              <p id="project-target-users-val" className="font-semibold text-slate-800 text-sm">{project.targetUsers}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><Globe size={14} className="text-slate-500" /> Country</span>
+              <p id="project-country-val" className="font-semibold text-slate-800 text-sm">{project.country || "United States"}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><DollarSign size={14} className="text-slate-500" /> Target Budget</span>
+              <p id="project-budget-val" className="font-semibold text-slate-800 text-sm">{project.budget || "Not specified"}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><Clock size={14} className="text-slate-500" /> Timeline</span>
+              <p id="project-timeline-val" className="font-semibold text-slate-800 text-sm">{project.timeline || "Not specified"}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-1">
+              <span className="text-slate-400 flex items-center gap-1.5"><ShieldCheck size={14} className="text-slate-500" /> Project Ownership</span>
+              <p className="font-mono text-slate-800 text-xs truncate">Verified Founder Owner</p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Phase 4 AI Venture Workflow Placeholder Shell */}
+      <Card className="p-6 space-y-3 border-dashed border-teal-200 bg-teal-50/30">
+        <div className="flex items-center gap-2">
+          <Layers size={18} className="text-teal-700" />
+          <h3 className="text-base font-bold text-slate-900">AI Venture Engine Pipeline (Phase 4)</h3>
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-teal-100 text-teal-800">
+            Phase Boundary
+          </span>
+        </div>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          In Phase 4, the 11 specialist AI agents (Market Research, Competitor Analysis, Opportunity Discovery, Product Strategy, PRD, Architecture, Revenue Modeling, Financials, GTM, Investor Readiness, and Pitch Deck) will sequentially execute to produce investor-grade venture blueprints.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Agent orchestration, React Flow graphs, human approvals, boardroom debate, and report exports are scheduled for subsequent phases.
+        </p>
+      </Card>
     </div>
   );
 }

@@ -1,39 +1,65 @@
-import Project from "../models/Project.js";
-import { sendProjectEmail } from "../services/emailService.js";
-import { isMemoryMode, memory } from "../services/inMemoryStore.js";
-import { runNextAgent } from "../workflows/agentWorkflow.js";
+import { projectService } from "../services/projectService.js";
 
-export async function listProjects(req, res) {
-  // TODO: Respond with the user's projects sorted by updatedAt descending.
-  res.status(501).json({ message: "List projects is not implemented yet" });
+export async function listProjects(req, res, next) {
+  try {
+    const projects = await projectService.listProjectsForUser(req.user.id);
+    return res.json(projects);
+  } catch (error) {
+    next(error);
+  }
 }
 
-export async function createProject(req, res) {
-  // TODO: Create the project for req.user and respond with 201.
-  res.status(501).json({ message: "Create project is not implemented yet" });
+export async function createProject(req, res, next) {
+  try {
+    const body = req.body || {};
+    const required = ["startupName", "idea", "industry", "targetUsers"];
+    for (const field of required) {
+      if (!body[field] || typeof body[field] !== "string" || !body[field].trim()) {
+        return res.status(400).json({ ok: false, message: `${field} is required`, status: 400 });
+      }
+    }
+
+    const project = await projectService.createProject(req.user.id, {
+      startupName: body.startupName.trim(),
+      idea: body.idea.trim(),
+      industry: body.industry.trim(),
+      targetUsers: body.targetUsers.trim(),
+      country: body.country?.trim() || "United States",
+      budget: body.budget?.trim() || "",
+      timeline: body.timeline?.trim() || ""
+    });
+
+    return res.status(201).json(project);
+  } catch (error) {
+    next(error);
+  }
 }
 
-export async function getProject(req, res) {
-  // TODO: Respond with the owned project for req.params.id, or 404.
-  res.status(501).json({ message: "Get project is not implemented yet" });
+export async function getProject(req, res, next) {
+  try {
+    const { id } = req.params;
+    const project = await projectService.getProjectForUser(id, req.user.id);
+    if (!project) {
+      return res.status(404).json({ ok: false, message: "Project not found", status: 404 });
+    }
+    return res.json(project);
+  } catch (error) {
+    next(error);
+  }
 }
 
-export async function runProject(req, res) {
-  // TODO: Load the owned project and run the next agent, honouring req.body.autoMode.
+export async function runProject(_req, res) {
   res.status(501).json({ message: "Run project is not implemented yet" });
 }
 
-export async function approveAgent(req, res) {
-  // TODO: Mark the completed agent run as approved so the next agent can start.
+export async function approveAgent(_req, res) {
   res.status(501).json({ message: "Approve agent is not implemented yet" });
 }
 
-export async function regenerateAgent(req, res) {
-  // TODO: Reset the agent run to pending, clear its report and approval, and run it again.
+export async function regenerateAgent(_req, res) {
   res.status(501).json({ message: "Regenerate agent is not implemented yet" });
 }
 
-export async function emailProject(req, res) {
-  // TODO: Email the venture blueprint to req.body.email or the signed-in user.
+export async function emailProject(_req, res) {
   res.status(501).json({ message: "Email project is not implemented yet" });
 }
