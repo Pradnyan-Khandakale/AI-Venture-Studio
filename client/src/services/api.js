@@ -47,28 +47,16 @@ export const authApi = {
   me: () => api.get("/auth/me").then((res) => res.data)
 };
 
-// Placeholder API stubs for future phases (Phase 3+)
-function notImplemented(name) {
-  return Promise.reject(new Error(`${name} is deferred to future phases`));
-}
-
 export const projectApi = {
   list: () => api.get("/projects").then((res) => res.data),
   create: (payload) => api.post("/projects", payload).then((res) => res.data),
   get: (id) => api.get(`/projects/${id}`).then((res) => res.data),
-  run: () => notImplemented("projectApi.run"),
-  approve: () => notImplemented("projectApi.approve"),
-  regenerate: () => notImplemented("projectApi.regenerate"),
-  email: () => notImplemented("projectApi.email"),
-  export: () => ""
+  run: (id, autoMode = false) => api.post(`/projects/${id}/run`, { autoMode }).then((res) => res.data),
+  approve: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/approve`).then((res) => res.data),
+  regenerate: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/regenerate`).then((res) => res.data)
 };
 
-export const boardroomApi = {
-  debate: () => notImplemented("boardroomApi.debate")
-};
-
-export const analyticsApi = {
-  overview: () => notImplemented("analyticsApi.overview")
-};
+export const boardroomApi = { debate: () => Promise.reject(new Error("Deferred to Phase 6")) };
+export const analyticsApi = { overview: () => Promise.reject(new Error("Deferred to Phase 7")) };
 
 export default api;
