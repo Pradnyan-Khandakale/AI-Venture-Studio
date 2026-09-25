@@ -1,14 +1,15 @@
 import React, { useState } from "react";
-import { Activity, LayoutDashboard, LogOut, ShieldCheck, Sparkles, UserCheck, RefreshCw } from "lucide-react";
+import { Activity, LayoutDashboard, LogOut, ShieldCheck, Sparkles, UserCheck, RefreshCw, Users } from "lucide-react";
 import AuthPage from "./pages/AuthPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import ProjectPage from "./pages/ProjectPage.jsx";
+import BoardroomPage from "./pages/BoardroomPage.jsx";
 import { useStudioStore } from "./store/useStudioStore.js";
 import { authApi } from "./services/api.js";
 import { Button } from "./components/ui/Button.jsx";
 
 export default function App() {
-  const { auth, logout, selectedProjectId, setSelectedProject } = useStudioStore();
+  const { auth, logout, selectedProjectId, setSelectedProject, activeView, setActiveView } = useStudioStore();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [meResult, setMeResult] = useState(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -44,7 +45,7 @@ export default function App() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Venture Studio</h1>
               <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">
-                Phase 5: Studio Workspace
+                Phase 6: Virtual Boardroom
               </p>
             </div>
           </div>
@@ -63,15 +64,28 @@ export default function App() {
             </Button>
 
             {selectedProjectId && (
-              <Button
-                id="nav-workspace-btn"
-                variant="primary"
-                size="sm"
-                className="text-xs"
-              >
-                <Sparkles size={14} />
-                Studio Workspace
-              </Button>
+              <>
+                <Button
+                  id="nav-workspace-btn"
+                  variant={activeView === "studio" ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={() => setActiveView("studio")}
+                  className="text-xs"
+                >
+                  <Sparkles size={14} />
+                  Studio Workspace
+                </Button>
+                <Button
+                  id="nav-boardroom-btn"
+                  variant={activeView === "boardroom" ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={() => setActiveView("boardroom")}
+                  className="text-xs border-indigo-200"
+                >
+                  <Users size={14} className="text-indigo-600" />
+                  Executive Boardroom
+                </Button>
+              </>
             )}
 
             {/* User identity badge */}
@@ -143,7 +157,14 @@ export default function App() {
         {/* Main View Router */}
         <main>
           {selectedProjectId ? (
-            <ProjectPage onBack={() => setSelectedProject(null)} />
+            activeView === "boardroom" ? (
+              <BoardroomPage onBack={() => setActiveView("studio")} />
+            ) : (
+              <ProjectPage
+                onBack={() => setSelectedProject(null)}
+                onOpenBoardroom={() => setActiveView("boardroom")}
+              />
+            )
           ) : (
             <DashboardPage onOpenStudio={(project) => setSelectedProject(project)} />
           )}

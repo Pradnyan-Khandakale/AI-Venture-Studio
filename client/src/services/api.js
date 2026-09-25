@@ -58,7 +58,14 @@ export const projectApi = {
   updateReport: (id, agentKey, content) => api.put(`/projects/${id}/agents/${agentKey}/report`, { content }).then((res) => res.data)
 };
 
-export const boardroomApi = { debate: () => Promise.reject(new Error("Deferred to Phase 6")) };
+export const boardroomApi = {
+  debate: (projectId, payload) => {
+    const data = typeof payload === "string" ? { question: payload } : payload;
+    return api.post(`/projects/${projectId}/boardroom`, data).then((res) => res.data);
+  },
+  listSessions: (projectId) => api.get(`/projects/${projectId}/boardroom`).then((res) => res.data),
+  getSession: (projectId, sessionId) => api.get(`/projects/${projectId}/boardroom/${sessionId}`).then((res) => res.data)
+};
 export const analyticsApi = { overview: () => Promise.reject(new Error("Deferred to Phase 7")) };
 
 export default api;

@@ -60,3 +60,12 @@ export async function generateText(prompt, options = {}) {
     `Unsupported AI_PROVIDER "${provider}". Supported providers are "gemini" and "ollama".`
   );
 }
+
+export const llmService = {
+  generateText,
+  getActiveProvider,
+  getProviderInfo
+};
+
+export default llmService;
+

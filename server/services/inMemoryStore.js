@@ -88,6 +88,7 @@ export const memory = {
       _id: id,
       id,
       ...payload,
+      user: payload.user || payload.userId,
       status: "draft",
       agentRuns,
       startupScore: {
@@ -154,16 +155,42 @@ export const memory = {
       .slice(0, 10);
   },
   createBoardroomSession: (payload) => {
-    // TODO: Push a boardroom session with a generated id and timestamps.
     const id = randomUUID();
     const session = {
       _id: id,
       id,
       ...payload,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      save() {
+        this.updatedAt = new Date().toISOString();
+        return Promise.resolve(this);
+      }
     };
     boardroomSessions.push(session);
     return session;
+  },
+  listBoardroomSessions: (projectId, userId) => {
+    return boardroomSessions
+      .filter(
+        (s) =>
+          String(s.project) === String(projectId) &&
+          String(s.user) === String(userId)
+      )
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+  findBoardroomSession: (sessionId, projectId, userId) => {
+    return (
+      boardroomSessions.find(
+        (s) =>
+          (s.id === sessionId || s._id === sessionId) &&
+          (!projectId || String(s.project) === String(projectId)) &&
+          (!userId || String(s.user) === String(userId))
+      ) || null
+    );
   }
 };
+
+export { memory as inMemoryStore };
+export default memory;
+

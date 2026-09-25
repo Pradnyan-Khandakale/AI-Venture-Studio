@@ -27,7 +27,7 @@ import { ReportViewer } from "../components/reports/ReportViewer.jsx";
 import { projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
-export default function ProjectPage({ onBack }) {
+export default function ProjectPage({ onBack, onOpenBoardroom }) {
   const queryClient = useQueryClient();
   const selectedProjectId = useStudioStore((state) => state.selectedProjectId);
 
@@ -210,6 +210,20 @@ export default function ProjectPage({ onBack }) {
             <RefreshCw size={13} className={isWorkflowBusy ? "animate-spin text-teal-700" : "text-teal-700"} />
             Auto Mode (Run All)
           </Button>
+
+          {/* Executive Boardroom Jump Button */}
+          {onOpenBoardroom && (
+            <Button
+              id="open-boardroom-action-btn"
+              variant="secondary"
+              size="sm"
+              onClick={onOpenBoardroom}
+              className="text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            >
+              <Users size={13} className="text-indigo-600" />
+              Executive Boardroom
+            </Button>
+          )}
 
           {/* View Switcher: Canvas Graph vs Step List */}
           <div className="flex items-center border border-slate-200 rounded-lg p-0.5 bg-slate-100">

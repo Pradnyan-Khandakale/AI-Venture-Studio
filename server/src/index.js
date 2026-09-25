@@ -44,7 +44,6 @@ const healthHandler = (_req, res) => {
 
 app.get(["/api/health", "/health"], healthHandler);
 
-
 // Mount API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectRoutes);
