@@ -183,9 +183,15 @@ export function ReportViewer({
           <div className="space-y-1">
             <strong className="font-semibold">Agent Generation Halted</strong>
             <p className="leading-relaxed">{agent.error || "The agent encountered an issue during execution."}</p>
-            <p className="text-[11px] text-rose-600">
-              You can retry generation using the &quot;Regenerate&quot; button once Ollama/services are accessible.
-            </p>
+            {agent.error && (agent.error.includes("429") || agent.error.toLowerCase().includes("quota") || agent.error.toLowerCase().includes("rate limit")) ? (
+              <p className="text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
+                Notice: Gemini API free-tier quota limit reached. Please wait a moment for the quota window to reset before clicking &quot;Regenerate&quot;.
+              </p>
+            ) : (
+              <p className="text-[11px] text-rose-600">
+                You can retry generation using the &quot;Regenerate&quot; button.
+              </p>
+            )}
           </div>
         </div>
       )}

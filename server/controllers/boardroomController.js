@@ -2,7 +2,7 @@ import BoardroomSession from "../models/BoardroomSession.js";
 import mongoose from "mongoose";
 import Project from "../models/Project.js";
 import { isMemoryMode, memory } from "../services/inMemoryStore.js";
-import { generateWithOllama } from "../services/llmService.js";
+import { generateText } from "../services/llmService.js";
 
 // TODO: Define the debate panel: CEO, CTO, CFO, CMO, and VC agents with the lens each one
 // TODO: should argue from.

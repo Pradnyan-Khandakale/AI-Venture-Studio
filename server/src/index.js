@@ -11,7 +11,11 @@ import exportRoutes from "../routes/exportRoutes.js";
 import memoryRoutes from "../routes/memoryRoutes.js";
 import projectRoutes from "../routes/projectRoutes.js";
 
-dotenv.config();
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -33,7 +37,8 @@ const healthHandler = (_req, res) => {
   res.json({
     ok: true,
     service: "ai-venture-studio",
-    database: isMemoryMode() ? "memory" : "mongodb"
+    database: isMemoryMode() ? "memory" : "mongodb",
+    aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim()
   });
 };
 
@@ -60,14 +65,17 @@ app.use(errorHandler);
 
 
 // Database connection & Server initialization
-async function startServer() {
+export async function startServer() {
   await connectDatabase();
-  app.listen(port, () => {
+  return app.listen(port, () => {
     console.log(`[Server] AI Venture Studio running on http://localhost:${port}`);
   });
 }
 
-startServer();
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
+  startServer();
+}
 
 export default app;
 

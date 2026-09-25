@@ -78,13 +78,31 @@ AI-Venture/
    ```
 
 2. **Configure Environment Variables**
-   Copy `.env.example` to `server/.env` (and create `.env` at root if needed):
+   Copy `.env.example` to `server/.env`:
 
    ```bash
-   cp .env.example server/.env
+   cp server/.env.example server/.env
    ```
 
-   Adjust variables (e.g., `PORT`, `MONGODB_URI`, `JWT_SECRET`, `OLLAMA_BASE_URL`) as needed for your local environment.
+   **Gemini Setup (Recommended Development & Testing):**
+   1. Create an API key in [Google AI Studio](https://aistudio.google.com/).
+   2. Place the key in `server/.env`:
+      ```env
+      AI_PROVIDER=gemini
+      GEMINI_API_KEY=your_gemini_api_key_here
+      GEMINI_MODEL=gemini-3.7-flash
+      ```
+   3. Start the backend (`npm run dev:server`).
+   4. Verify the health endpoint (`curl http://localhost:5000/api/health`).
+   5. Launch an agent workflow from the website UI.
+
+   **Ollama Setup (Optional Local Machine Inference):**
+   To run locally with Ollama instead of Gemini, update `server/.env`:
+   ```env
+   AI_PROVIDER=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=llama3
+   ```
 
 ---
 

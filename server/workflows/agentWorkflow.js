@@ -1,7 +1,7 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { agentDefinitions } from "../agents/agentDefinitions.js";
 import { agentPrompts } from "../prompts/agentPrompts.js";
-import { generateWithOllama } from "../services/llmService.js";
+import { generateText } from "../services/llmService.js";
 import { storeReportMemory } from "../services/memoryService.js";
 import { calculateStartupScore } from "../services/scoreService.js";
 import { searchMarketSignals } from "../services/searchService.js";
@@ -78,10 +78,25 @@ async function executeAgentNode(state, agentDef) {
       searchSignals = await searchMarketSignals(query);
     }
 
-    // 2. Gather prior reports context from completed upstream agents
+    // 2. Gather relevant prior reports context (optimized context window to reduce token usage)
+    const agentDependencies = {
+      market: [],
+      competitor: ["market"],
+      opportunity: ["market", "competitor"],
+      product: ["market", "opportunity"],
+      prd: ["product", "opportunity"],
+      architecture: ["prd", "product"],
+      revenue: ["product", "market"],
+      financial: ["revenue", "architecture"],
+      gtm: ["product", "market", "competitor"],
+      investor: ["market", "opportunity", "revenue", "financial"],
+      pitch: ["opportunity", "product", "revenue", "financial", "investor"]
+    };
+
+    const relevantKeys = agentDependencies[agentDef.key] || [];
     const priorReports = {};
-    for (let i = 0; i < currentRunIndex; i++) {
-      const prior = runs[i];
+    for (const key of relevantKeys) {
+      const prior = runs.find((r) => r.key === key);
       if (prior?.report) {
         priorReports[prior.key] = prior.report;
       }
@@ -91,8 +106,8 @@ async function executeAgentNode(state, agentDef) {
     const promptFn = agentPrompts[agentDef.key] || agentPrompts.market;
     const prompt = promptFn(project, searchSignals, priorReports);
 
-    // 4. Generate with local Ollama instance
-    const llmResult = await generateWithOllama(prompt);
+    // 4. Generate via unified AI provider adapter (Gemini or Ollama)
+    const llmResult = await generateText(prompt, { agentKey: agentDef.key });
 
     const runtimeMs = Date.now() - startTime;
     currentRun.status = "completed";

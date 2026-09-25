@@ -8,13 +8,14 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@langchain/langgraph": "^0.2.31",
     "bcryptjs": "^2.4.3",
+    "chromadb": "^1.10.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "duck-duck-scrape": "^2.2.7",
     "express": "^4.21.2",
-    "@langchain/langgraph": "^0.2.31",
-    "chromadb": "^1.10.5",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.2",
     "nodemailer": "^6.9.16",
