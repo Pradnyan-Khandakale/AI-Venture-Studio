@@ -53,7 +53,9 @@ export const projectApi = {
   get: (id) => api.get(`/projects/${id}`).then((res) => res.data),
   run: (id, autoMode = false) => api.post(`/projects/${id}/run`, { autoMode }).then((res) => res.data),
   approve: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/approve`).then((res) => res.data),
-  regenerate: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/regenerate`).then((res) => res.data)
+  regenerate: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/regenerate`).then((res) => res.data),
+  getReport: (id, agentKey) => api.get(`/projects/${id}/agents/${agentKey}/report`).then((res) => res.data),
+  updateReport: (id, agentKey, content) => api.put(`/projects/${id}/agents/${agentKey}/report`, { content }).then((res) => res.data)
 };
 
 export const boardroomApi = { debate: () => Promise.reject(new Error("Deferred to Phase 6")) };

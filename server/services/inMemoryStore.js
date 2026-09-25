@@ -62,7 +62,7 @@ export const memory = {
       id,
       name: name || "Founder",
       email: (email || "").toLowerCase().trim(),
-      passwordHash,
+      passwordHash: hash,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

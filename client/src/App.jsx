@@ -44,7 +44,7 @@ export default function App() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Venture Studio</h1>
               <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">
-                Phase 3: Project Management
+                Phase 5: Studio Workspace
               </p>
             </div>
           </div>
@@ -70,7 +70,7 @@ export default function App() {
                 className="text-xs"
               >
                 <Sparkles size={14} />
-                {selectedProject?.startupName || "Active Venture"}
+                Studio Workspace
               </Button>
             )}
 

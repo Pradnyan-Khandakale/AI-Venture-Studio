@@ -1,5 +1,6 @@
 import { projectService } from "../services/projectService.js";
 import { runNextAgent } from "../workflows/agentWorkflow.js";
+import { storeReportMemory } from "../services/memoryService.js";
 
 export async function listProjects(req, res, next) {
   try {
@@ -104,6 +105,62 @@ export async function regenerateAgent(req, res, next) {
 
     const updated = await runNextAgent(project, req.user, { autoMode: false, targetAgentKey: agentKey });
     return res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAgentReport(req, res, next) {
+  try {
+    const { id, agentKey } = req.params;
+    const project = await findProjectOr404(id, req.user.id, res);
+    if (!project) return;
+
+    const agentRun = (project.agentRuns || []).find((r) => r.key === agentKey);
+    if (!agentRun) {
+      return res.status(404).json({ ok: false, message: `Agent run not found for ${agentKey}`, status: 404 });
+    }
+
+    return res.json({
+      ok: true,
+      agentKey,
+      outputFile: agentRun.outputFile,
+      report: agentRun.report || ""
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateAgentReport(req, res, next) {
+  try {
+    const { id, agentKey } = req.params;
+    const { content } = req.body || {};
+
+    if (typeof content !== "string") {
+      return res.status(400).json({ ok: false, message: "Report content must be a string", status: 400 });
+    }
+
+    const project = await findProjectOr404(id, req.user.id, res);
+    if (!project) return;
+
+    const agentRun = (project.agentRuns || []).find((r) => r.key === agentKey);
+    if (!agentRun) {
+      return res.status(404).json({ ok: false, message: `Agent run not found for ${agentKey}`, status: 404 });
+    }
+
+    agentRun.report = content;
+    await project.save();
+
+    await storeReportMemory({
+      user: req.user.id,
+      project: project._id || project.id,
+      agentKey,
+      outputFile: agentRun.outputFile,
+      content
+    });
+
+    return res.json(project);
   } catch (error) {
     next(error);
   }
