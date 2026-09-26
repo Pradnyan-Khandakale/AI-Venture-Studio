@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Project from "../models/Project.js";
 import { isMemoryMode, memory } from "./inMemoryStore.js";
+import { indexProjectMemory } from "./memoryService.js";
 
 export const projectService = {
   async createProject(userId, payload) {
@@ -15,10 +16,13 @@ export const projectService = {
       user: userId
     };
 
-    if (isMemoryMode()) {
-      return memory.createProject(data);
+    const project = isMemoryMode() ? memory.createProject(data) : await Project.create(data);
+    try {
+      await indexProjectMemory(project, userId);
+    } catch (_err) {
+      // Non-blocking memory indexing
     }
-    return Project.create(data);
+    return project;
   },
 
   async listProjectsForUser(userId) {

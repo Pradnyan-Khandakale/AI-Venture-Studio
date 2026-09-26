@@ -13,14 +13,21 @@ function getInitialAuth() {
 
 export const useStudioStore = create((set) => ({
   selectedProjectId: localStorage.getItem("avs_project_id") || null,
-  activeView: "studio", // "studio" | "boardroom"
+  activeView: localStorage.getItem("avs_project_id") ? "studio" : "dashboard", // "dashboard" | "studio" | "boardroom" | "analytics" | "memory"
   setActiveView: (view) => set({ activeView: view }),
   auth: getInitialAuth(),
   setSelectedProject: (p) => {
     const id = p?._id || p?.id || p || null;
-    if (id) localStorage.setItem("avs_project_id", id);
-    else localStorage.removeItem("avs_project_id");
-    set({ selectedProjectId: id, activeView: "studio" });
+    if (id) {
+      localStorage.setItem("avs_project_id", id);
+      set({ selectedProjectId: id, activeView: "studio" });
+    } else {
+      localStorage.removeItem("avs_project_id");
+      set((state) => ({
+        selectedProjectId: null,
+        activeView: state.activeView === "studio" || state.activeView === "boardroom" ? "dashboard" : state.activeView
+      }));
+    }
   },
   setAuth: ({ token, user }) => {
     if (token) localStorage.setItem("avs_token", token);

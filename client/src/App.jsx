@@ -1,9 +1,21 @@
 import React, { useState } from "react";
-import { Activity, LayoutDashboard, LogOut, ShieldCheck, Sparkles, UserCheck, RefreshCw, Users } from "lucide-react";
+import {
+  Activity,
+  LayoutDashboard,
+  LogOut,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Users,
+  Database,
+  TrendingUp
+} from "lucide-react";
 import AuthPage from "./pages/AuthPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import ProjectPage from "./pages/ProjectPage.jsx";
 import BoardroomPage from "./pages/BoardroomPage.jsx";
+import AnalyticsPage from "./pages/AnalyticsPage.jsx";
+import MemoryPage from "./pages/MemoryPage.jsx";
 import { useStudioStore } from "./store/useStudioStore.js";
 import { authApi } from "./services/api.js";
 import { Button } from "./components/ui/Button.jsx";
@@ -45,22 +57,25 @@ export default function App() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Venture Studio</h1>
               <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">
-                Phase 6: Virtual Boardroom
+                Phase 7: Memory & Analytics
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             {/* View navigation switcher */}
             <Button
               id="nav-dashboard-btn"
-              variant={!selectedProjectId ? "primary" : "secondary"}
+              variant={activeView === "dashboard" && !selectedProjectId ? "primary" : "secondary"}
               size="sm"
-              onClick={() => setSelectedProject(null)}
+              onClick={() => {
+                setSelectedProject(null);
+                setActiveView("dashboard");
+              }}
               className="text-xs"
             >
               <LayoutDashboard size={14} />
-              Projects Dashboard
+              Ventures
             </Button>
 
             {selectedProjectId && (
@@ -73,7 +88,7 @@ export default function App() {
                   className="text-xs"
                 >
                   <Sparkles size={14} />
-                  Studio Workspace
+                  Studio
                 </Button>
                 <Button
                   id="nav-boardroom-btn"
@@ -83,10 +98,34 @@ export default function App() {
                   className="text-xs border-indigo-200"
                 >
                   <Users size={14} className="text-indigo-600" />
-                  Executive Boardroom
+                  Boardroom
                 </Button>
               </>
             )}
+
+            {/* Phase 7: Memory Search Button */}
+            <Button
+              id="nav-memory-btn"
+              variant={activeView === "memory" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => setActiveView("memory")}
+              className="text-xs border-teal-200"
+            >
+              <Database size={14} className="text-teal-700" />
+              Memory & RAG
+            </Button>
+
+            {/* Phase 7: Analytics Button */}
+            <Button
+              id="nav-analytics-btn"
+              variant={activeView === "analytics" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => setActiveView("analytics")}
+              className="text-xs border-indigo-200"
+            >
+              <TrendingUp size={14} className="text-indigo-600" />
+              Analytics
+            </Button>
 
             {/* User identity badge */}
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs shadow-sm">
@@ -105,7 +144,7 @@ export default function App() {
               title="Toggle JWT Diagnostics"
             >
               <ShieldCheck size={14} className="text-teal-600" />
-              Auth Diagnostics
+              Auth Diag
             </Button>
 
             {/* Sign out */}
@@ -156,17 +195,40 @@ export default function App() {
 
         {/* Main View Router */}
         <main>
-          {selectedProjectId ? (
+          {activeView === "memory" ? (
+            <MemoryPage
+              onOpenStudio={(project) => {
+                setSelectedProject(project);
+                setActiveView("studio");
+              }}
+            />
+          ) : activeView === "analytics" ? (
+            <AnalyticsPage
+              onOpenStudio={(project) => {
+                setSelectedProject(project);
+                setActiveView("studio");
+              }}
+            />
+          ) : selectedProjectId ? (
             activeView === "boardroom" ? (
               <BoardroomPage onBack={() => setActiveView("studio")} />
             ) : (
               <ProjectPage
-                onBack={() => setSelectedProject(null)}
+                onBack={() => {
+                  setSelectedProject(null);
+                  setActiveView("dashboard");
+                }}
                 onOpenBoardroom={() => setActiveView("boardroom")}
+                onOpenAnalytics={() => setActiveView("analytics")}
               />
             )
           ) : (
-            <DashboardPage onOpenStudio={(project) => setSelectedProject(project)} />
+            <DashboardPage
+              onOpenStudio={(project) => {
+                setSelectedProject(project);
+                setActiveView("studio");
+              }}
+            />
           )}
         </main>
       </div>

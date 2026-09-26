@@ -3,6 +3,7 @@ import { isMemoryMode, memory } from "./inMemoryStore.js";
 import { generateText } from "./llmService.js";
 import { boardroomPrompts } from "../prompts/boardroomPrompts.js";
 import { projectService } from "./projectService.js";
+import { retrieveRelevantContext } from "./memoryService.js";
 
 const EXECUTIVE_ROLES = [
   { key: "ceo", role: "CEO", title: "Chief Executive Officer" },
@@ -56,6 +57,21 @@ export const boardroomService = {
     }
 
     const approvedReports = getApprovedReports(project);
+
+    // Retrieve relevant historical venture knowledge via RAG memory (non-blocking)
+    try {
+      const rag = await retrieveRelevantContext({
+        userId,
+        query: question,
+        limit: 2
+      });
+      if (rag?.context) {
+        approvedReports.historical_memory = rag.context;
+      }
+    } catch (ragErr) {
+      console.warn("[BoardroomService] Historical memory retrieval skipped:", ragErr.message);
+    }
+
     const roleResponses = {};
     const messages = [];
     let totalTokens = 0;

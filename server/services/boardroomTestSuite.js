@@ -3,6 +3,7 @@ import Project from "../models/Project.js";
 import User from "../models/User.js";
 import BoardroomSession from "../models/BoardroomSession.js";
 import boardroomService from "./boardroomService.js";
+import { authService } from "./authService.js";
 import { signToken as generateAuthToken } from "../utils/authToken.js";
 import { llmService } from "./llmService.js";
 
@@ -43,20 +44,16 @@ export async function runBoardroomTestSuite() {
       password: "Password123!"
     };
 
-    if (isMemoryMode()) {
-      userA = await inMemoryStore.createUser(userAData);
-      userB = await inMemoryStore.createUser(userBData);
-    } else {
-      userA = await User.create(userAData);
-      userB = await User.create(userBData);
-    }
-
-    tokenA = generateAuthToken(userA);
-    tokenB = generateAuthToken(userB);
+    const regA = await authService.registerUser(userAData);
+    const regB = await authService.registerUser(userBData);
+    userA = regA.user;
+    userB = regB.user;
+    tokenA = regA.token;
+    tokenB = regB.token;
 
     record("Phase 2 Auth Verification", Boolean(tokenA && tokenB), {
-      userAId: userA.id || userA._id,
-      userBId: userB.id || userB._id
+      userAId: userA.id,
+      userBId: userB.id
     });
   } catch (err) {
     record("Phase 2 Auth Verification", false, { error: err.message });
@@ -66,7 +63,6 @@ export async function runBoardroomTestSuite() {
   try {
     const projectData = {
       user: userA.id || userA._id,
-      userId: userA.id || userA._id,
       startupName: "FounderFlow AI",
       idea: "An AI-powered automated venture creation engine for solo founders and technical teams",
       industry: "AI SaaS / Venture Tech",
@@ -74,23 +70,23 @@ export async function runBoardroomTestSuite() {
       country: "India",
       budget: "$25,000",
       timeline: "6 months",
-      status: "in_progress",
+      status: "running",
       agentRuns: [
         {
           key: "market",
-          agentName: "Market Research Specialist",
+          name: "Market Research Specialist",
           status: "completed",
           approved: true,
           outputFile: "market_report.md",
-          reportContent: "# Market Analysis for FounderFlow AI\n\n- Indian market: rapidly growing developer base, lower initial CAC, but lower average ARPU ($15-$30/mo).\n- US market: high willingness to pay ($99-$299/mo), huge SaaS TAM, but 4x-5x higher acquisition costs and intense competition."
+          report: "# Market Analysis for FounderFlow AI\n\n- Indian market: rapidly growing developer base, lower initial CAC, but lower average ARPU ($15-$30/mo).\n- US market: high willingness to pay ($99-$299/mo), huge SaaS TAM, but 4x-5x higher acquisition costs and intense competition."
         },
         {
           key: "financial",
-          agentName: "Financial Modeler",
+          name: "Financial Modeler",
           status: "completed",
           approved: true,
           outputFile: "financial_forecast.md",
-          reportContent: "# Financial Outlook\n\n- Initial Budget: $25,000.\n- Runway: 6 months at ~$4,000/mo burn rate.\n- India launch runway: 9-12 months due to lower operational costs.\n- US launch runway: 4-6 months with paid ads burn."
+          report: "# Financial Outlook\n\n- Initial Budget: $25,000.\n- Runway: 6 months at ~$4,000/mo burn rate.\n- India launch runway: 9-12 months due to lower operational costs.\n- US launch runway: 4-6 months with paid ads burn."
         }
       ]
     };

@@ -15,7 +15,8 @@ import {
   Globe,
   DollarSign,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  TrendingUp
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Badge } from "../components/ui/Badge.jsx";
@@ -27,7 +28,7 @@ import { ReportViewer } from "../components/reports/ReportViewer.jsx";
 import { projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
-export default function ProjectPage({ onBack, onOpenBoardroom }) {
+export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }) {
   const queryClient = useQueryClient();
   const selectedProjectId = useStudioStore((state) => state.selectedProjectId);
 
@@ -222,6 +223,20 @@ export default function ProjectPage({ onBack, onOpenBoardroom }) {
             >
               <Users size={13} className="text-indigo-600" />
               Executive Boardroom
+            </Button>
+          )}
+
+          {/* Project Analytics Jump Button */}
+          {onOpenAnalytics && (
+            <Button
+              id="open-project-analytics-action-btn"
+              variant="secondary"
+              size="sm"
+              onClick={onOpenAnalytics}
+              className="text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            >
+              <TrendingUp size={13} className="text-indigo-600" />
+              Analytics
             </Button>
           )}
 

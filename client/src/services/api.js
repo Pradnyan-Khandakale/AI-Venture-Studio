@@ -66,6 +66,15 @@ export const boardroomApi = {
   listSessions: (projectId) => api.get(`/projects/${projectId}/boardroom`).then((res) => res.data),
   getSession: (projectId, sessionId) => api.get(`/projects/${projectId}/boardroom/${sessionId}`).then((res) => res.data)
 };
-export const analyticsApi = { overview: () => Promise.reject(new Error("Deferred to Phase 7")) };
+export const analyticsApi = {
+  overview: () => api.get("/analytics/overview").then((res) => res.data),
+  getProjectAnalytics: (projectId) => api.get(`/analytics/projects/${projectId}`).then((res) => res.data)
+};
+
+export const memoryApi = {
+  search: (query, options = {}) =>
+    api.get("/memory/search", { params: { q: query, ...options } }).then((res) => res.data)
+};
 
 export default api;
+

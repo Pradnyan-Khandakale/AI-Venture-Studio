@@ -13,7 +13,9 @@ import {
   ShieldAlert,
   Sparkles,
   TrendingUp,
-  Users
+  Users,
+  Briefcase,
+  MessageSquareText
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Button } from "../components/ui/Button.jsx";

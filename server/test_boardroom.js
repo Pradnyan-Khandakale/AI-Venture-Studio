@@ -1,6 +1,8 @@
+import { connectDatabase } from "./config/database.js";
 import { runBoardroomTestSuite } from "./services/boardroomTestSuite.js";
 
 console.log("[Test] Running Boardroom verification suite...");
+await connectDatabase();
 runBoardroomTestSuite()
   .then((report) => {
     console.log("[Test] Results Matrix:");

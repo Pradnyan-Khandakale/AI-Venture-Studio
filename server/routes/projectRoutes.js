@@ -13,6 +13,7 @@ import {
 } from "../controllers/projectController.js";
 
 import { debate, getSession, listSessions } from "../controllers/boardroomController.js";
+import { projectAnalytics } from "../controllers/analyticsController.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -25,6 +26,9 @@ router.post("/:id/agents/:agentKey/approve", approveAgent);
 router.post("/:id/agents/:agentKey/regenerate", regenerateAgent);
 router.get("/:id/agents/:agentKey/report", getAgentReport);
 router.put("/:id/agents/:agentKey/report", updateAgentReport);
+
+// Phase 7: Project Analytics Route
+router.get("/:id/analytics", projectAnalytics);
 
 // Phase 6: Boardroom Executive Council Routes
 router.post("/:id/boardroom", debate);

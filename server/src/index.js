@@ -1,6 +1,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import mongoose from "mongoose";
 import { connectDatabase } from "../config/database.js";
 import { errorHandler } from "../middleware/errorHandler.js";
 import { isMemoryMode } from "../services/inMemoryStore.js";
@@ -34,10 +35,11 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/", (_req, res) => res.json({ ok: true, service: "ai-venture-studio" }));
 
 const healthHandler = (_req, res) => {
+  const isMongoConnected = !isMemoryMode() && mongoose.connection.readyState === 1;
   res.json({
     ok: true,
     service: "ai-venture-studio",
-    database: isMemoryMode() ? "memory" : "mongodb",
+    database: isMongoConnected ? "mongodb" : "memory",
     aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim()
   });
 };
