@@ -57,7 +57,7 @@ export default function App() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Venture Studio</h1>
               <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">
-                Phase 7: Memory & Analytics
+                Phase 8: Production Studio
               </p>
             </div>
           </div>

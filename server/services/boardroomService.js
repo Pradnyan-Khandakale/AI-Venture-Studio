@@ -159,8 +159,8 @@ export const boardroomService = {
   },
 
   async listSessions(projectId, userId) {
-    const pid = typeof projectId === "object" ? projectId.projectId : projectId;
-    const uid = typeof projectId === "object" ? projectId.userId : userId;
+    const pid = (projectId && typeof projectId === "object" && "projectId" in projectId) ? projectId.projectId : String(projectId?._id || projectId || "");
+    const uid = (projectId && typeof projectId === "object" && "userId" in projectId) ? projectId.userId : String(userId?._id || userId || "");
     const project = await projectService.getProjectForUser(pid, uid);
     if (!project) {
       const error = new Error("Project not found");
@@ -173,9 +173,9 @@ export const boardroomService = {
   },
 
   async getSession(sessionId, projectId, userId) {
-    const sid = typeof sessionId === "object" ? sessionId.sessionId : sessionId;
-    const pid = typeof sessionId === "object" ? sessionId.projectId : projectId;
-    const uid = typeof sessionId === "object" ? sessionId.userId : userId;
+    const sid = (sessionId && typeof sessionId === "object" && "sessionId" in sessionId) ? sessionId.sessionId : String(sessionId?._id || sessionId || "");
+    const pid = (sessionId && typeof sessionId === "object" && "projectId" in sessionId) ? sessionId.projectId : (projectId ? String(projectId?._id || projectId) : "");
+    const uid = (sessionId && typeof sessionId === "object" && "userId" in sessionId) ? sessionId.userId : (userId ? String(userId?._id || userId) : "");
 
     if (pid && uid) {
       const project = await projectService.getProjectForUser(pid, uid);

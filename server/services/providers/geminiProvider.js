@@ -121,7 +121,10 @@ export async function generate(prompt, options = {}) {
   }
 
   // Model selection (options.model overrides env, falling back to GEMINI_MODEL or default)
-  const model = options.model || process.env.GEMINI_MODEL || "gemini-3.7-flash";
+  const configuredModel = options.model || process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  let currentModel = configuredModel;
+  const fallbackModels = Array.from(new Set([configuredModel, "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest"]));
+  const triedModels = new Set();
 
   // Output token limit
   const maxOutputTokens =
@@ -137,7 +140,7 @@ export async function generate(prompt, options = {}) {
   const thinkingBudget = rawBudget !== undefined ? Number(rawBudget) : undefined;
 
   // Retry policy configuration (bounded exponential backoff)
-  const maxRetries = options.maxRetries ?? (process.env.GEMINI_MAX_RETRIES ? parseInt(process.env.GEMINI_MAX_RETRIES, 10) : 2);
+  const maxRetries = options.maxRetries ?? (process.env.GEMINI_MAX_RETRIES ? parseInt(process.env.GEMINI_MAX_RETRIES, 10) : 3);
   const baseDelayMs = options.baseDelayMs ?? (process.env.GEMINI_RETRY_DELAY_MS ? parseInt(process.env.GEMINI_RETRY_DELAY_MS, 10) : 2000);
   const maxAttempts = maxRetries + 1;
 
@@ -147,6 +150,7 @@ export async function generate(prompt, options = {}) {
 
   while (attempt < maxAttempts) {
     attempt++;
+    let config = {};
 
     try {
       if (options._simulateRateLimit || process.env.SIMULATE_GEMINI_RATE_LIMIT === "true") {
@@ -158,17 +162,18 @@ export async function generate(prompt, options = {}) {
 
       const client = new GoogleGenAI({ apiKey });
 
-      const config = {
+      config = {
         maxOutputTokens,
         temperature
       };
 
-      if (thinkingBudget !== undefined && !isNaN(thinkingBudget)) {
+      const supportsThinking = currentModel.includes("3.7") || currentModel.includes("thinking");
+      if (supportsThinking && thinkingBudget !== undefined && !isNaN(thinkingBudget)) {
         config.thinkingConfig = { thinkingBudget };
       }
 
       const response = await client.models.generateContent({
-        model,
+        model: currentModel,
         contents: prompt,
         config
       });
@@ -192,11 +197,19 @@ export async function generate(prompt, options = {}) {
           outputTokens,
           totalTokens
         },
-        model,
+        model: currentModel,
         totalDurationMs
       };
     } catch (error) {
       lastError = error;
+
+      // If config had thinkingConfig and API rejected with INVALID_ARGUMENT, retry without thinkingConfig
+      if (config.thinkingConfig && String(error?.message || "").toLowerCase().includes("invalid argument")) {
+        console.warn(`[GeminiProvider] Model ${currentModel} rejected thinkingConfig. Retrying without it...`);
+        delete config.thinkingConfig;
+        attempt = Math.max(0, attempt - 1);
+        continue;
+      }
 
       // Check for Authentication / Key Invalid error (do NOT retry auth failures)
       if (isAuthError(error)) {
@@ -208,13 +221,25 @@ export async function generate(prompt, options = {}) {
 
       // Check for Rate Limit / Quota Exhaustion
       if (isRateLimitError(error)) {
+        triedModels.add(currentModel);
+        const nextModel = fallbackModels.find((m) => !triedModels.has(m));
+        if (nextModel) {
+          console.warn(
+            `[GeminiProvider] Quota reached on ${currentModel}. Switching to alternate model ${nextModel}...`
+          );
+          currentModel = nextModel;
+          await sleep(1000);
+          continue;
+        }
+
         if (attempt < maxAttempts) {
+          triedModels.clear();
           const suggestedRetry = extractRetryAfterMs(error);
           const jitter = Math.floor(Math.random() * 500);
           const delayMs = suggestedRetry || baseDelayMs * Math.pow(2, attempt - 1) + jitter;
 
           console.warn(
-            `[GeminiProvider] Rate limit encountered (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`
+            `[GeminiProvider] Rate limit encountered across models (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`
           );
           await sleep(delayMs);
           continue;
@@ -231,7 +256,19 @@ export async function generate(prompt, options = {}) {
 
       // Check for transient server errors (503 high demand, 502/504 gateway, network resets)
       if (isTransientServerError(error)) {
+        triedModels.add(currentModel);
+        const nextModel = fallbackModels.find((m) => !triedModels.has(m));
+        if (nextModel) {
+          console.warn(
+            `[GeminiProvider] 503 high demand on ${currentModel}. Switching to alternate model ${nextModel}...`
+          );
+          currentModel = nextModel;
+          await sleep(1000);
+          continue;
+        }
+
         if (attempt < maxAttempts) {
+          triedModels.clear();
           const jitter = Math.floor(Math.random() * 500);
           const delayMs = baseDelayMs * Math.pow(2, attempt - 1) + jitter;
           console.warn(

@@ -6,5 +6,6 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/search", queryMemory);
+router.post("/search", queryMemory);
 
 export default router;

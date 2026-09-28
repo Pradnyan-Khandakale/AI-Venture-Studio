@@ -55,7 +55,76 @@ export const projectApi = {
   approve: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/approve`).then((res) => res.data),
   regenerate: (id, agentKey) => api.post(`/projects/${id}/agents/${agentKey}/regenerate`).then((res) => res.data),
   getReport: (id, agentKey) => api.get(`/projects/${id}/agents/${agentKey}/report`).then((res) => res.data),
-  updateReport: (id, agentKey, content) => api.put(`/projects/${id}/agents/${agentKey}/report`, { content }).then((res) => res.data)
+  updateReport: (id, agentKey, content) => api.put(`/projects/${id}/agents/${agentKey}/report`, { content }).then((res) => res.data),
+  email: (id, email) => api.post(`/projects/${id}/email`, { email }).then((res) => res.data)
+};
+
+// Phase 8: Export and Email API client
+export const exportApi = {
+  downloadPdf: async (projectId, startupName = "venture") => {
+    const res = await api.get(`/projects/${projectId}/export/pdf`, {
+      responseType: "blob"
+    });
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const cleanName = (startupName || "venture")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "venture";
+    link.setAttribute("download", `${cleanName}-venture-report.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+
+  downloadMarkdown: async (projectId, startupName = "venture") => {
+    const res = await api.get(`/projects/${projectId}/export/markdown`, {
+      responseType: "blob"
+    });
+    const blob = new Blob([res.data], { type: "text/markdown;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const cleanName = (startupName || "venture")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "venture";
+    link.setAttribute("download", `${cleanName}-venture-report.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+
+  downloadJson: async (projectId, startupName = "venture") => {
+    const res = await api.get(`/projects/${projectId}/export/json`, {
+      responseType: "blob"
+    });
+    const blob = new Blob([res.data], { type: "application/json;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const cleanName = (startupName || "venture")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "venture";
+    link.setAttribute("download", `${cleanName}-venture-report.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+
+  sendEmail: async (projectId, email) => {
+    const res = await api.post(`/projects/${projectId}/email`, { email });
+    return res.data;
+  }
 };
 
 export const boardroomApi = {

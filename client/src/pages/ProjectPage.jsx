@@ -16,7 +16,14 @@ import {
   DollarSign,
   Clock,
   CheckCircle2,
-  TrendingUp
+  TrendingUp,
+  Download,
+  FileText,
+  FileCode,
+  Code,
+  Mail,
+  Send,
+  Check
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Badge } from "../components/ui/Badge.jsx";
@@ -25,7 +32,7 @@ import { Card } from "../components/ui/Card.jsx";
 import { WorkflowGraph } from "../components/workflow/WorkflowGraph.jsx";
 import { StepListView } from "../components/workflow/StepListView.jsx";
 import { ReportViewer } from "../components/reports/ReportViewer.jsx";
-import { projectApi } from "../services/api.js";
+import { projectApi, exportApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
 export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }) {
@@ -36,6 +43,18 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   const [viewMode, setViewMode] = useState("canvas"); // "canvas" | "list"
   const [showAutoConfirm, setShowAutoConfirm] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
+
+  // Phase 8: Export and Email delivery state
+  const [exportState, setExportState] = useState({
+    pdf: "idle",
+    markdown: "idle",
+    json: "idle"
+  });
+  const [exportFeedback, setExportFeedback] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailStatus, setEmailStatus] = useState("idle"); // "idle" | "loading" | "success" | "error"
+  const [emailFeedback, setEmailFeedback] = useState("");
 
   // Poll project state dynamically: accelerate polling while running
   const { data: project, isLoading, isError, error } = useQuery(
@@ -144,6 +163,90 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   const handleApprove = (agentKey) => approveMutation.mutate(agentKey);
   const handleRegenerate = (agentKey) => regenerateMutation.mutate(agentKey);
   const handleSaveReport = (agentKey, content) => updateReportMutation.mutateAsync({ agentKey, content });
+
+  const isExporting =
+    exportState.pdf === "loading" ||
+    exportState.markdown === "loading" ||
+    exportState.json === "loading" ||
+    emailStatus === "loading";
+
+  const handleExportPdf = async () => {
+    try {
+      setExportFeedback(null);
+      setExportState((s) => ({ ...s, pdf: "loading" }));
+      await exportApi.downloadPdf(selectedProjectId, project.startupName);
+      setExportState((s) => ({ ...s, pdf: "success" }));
+      setExportFeedback({ type: "success", message: "Venture blueprint PDF downloaded successfully." });
+      setTimeout(() => {
+        setExportState((s) => ({ ...s, pdf: "idle" }));
+        setExportFeedback(null);
+      }, 3500);
+    } catch (err) {
+      setExportState((s) => ({ ...s, pdf: "error" }));
+      setExportFeedback({
+        type: "error",
+        message: err.response?.data?.message || err.message || "Failed to download PDF."
+      });
+      setTimeout(() => setExportState((s) => ({ ...s, pdf: "idle" })), 4000);
+    }
+  };
+
+  const handleExportMarkdown = async () => {
+    try {
+      setExportFeedback(null);
+      setExportState((s) => ({ ...s, markdown: "loading" }));
+      await exportApi.downloadMarkdown(selectedProjectId, project.startupName);
+      setExportState((s) => ({ ...s, markdown: "success" }));
+      setExportFeedback({ type: "success", message: "Venture blueprint Markdown downloaded successfully." });
+      setTimeout(() => {
+        setExportState((s) => ({ ...s, markdown: "idle" }));
+        setExportFeedback(null);
+      }, 3500);
+    } catch (err) {
+      setExportState((s) => ({ ...s, markdown: "error" }));
+      setExportFeedback({
+        type: "error",
+        message: err.response?.data?.message || err.message || "Failed to download Markdown."
+      });
+      setTimeout(() => setExportState((s) => ({ ...s, markdown: "idle" })), 4000);
+    }
+  };
+
+  const handleExportJson = async () => {
+    try {
+      setExportFeedback(null);
+      setExportState((s) => ({ ...s, json: "loading" }));
+      await exportApi.downloadJson(selectedProjectId, project.startupName);
+      setExportState((s) => ({ ...s, json: "success" }));
+      setExportFeedback({ type: "success", message: "Venture blueprint JSON downloaded successfully." });
+      setTimeout(() => {
+        setExportState((s) => ({ ...s, json: "idle" }));
+        setExportFeedback(null);
+      }, 3500);
+    } catch (err) {
+      setExportState((s) => ({ ...s, json: "error" }));
+      setExportFeedback({
+        type: "error",
+        message: err.response?.data?.message || err.message || "Failed to download JSON."
+      });
+      setTimeout(() => setExportState((s) => ({ ...s, json: "idle" })), 4000);
+    }
+  };
+
+  const handleSendEmail = async (e) => {
+    e?.preventDefault();
+    if (!emailInput.trim()) return;
+    try {
+      setEmailStatus("loading");
+      setEmailFeedback("");
+      const res = await exportApi.sendEmail(selectedProjectId, emailInput.trim());
+      setEmailStatus("success");
+      setEmailFeedback(res.message || `Blueprint sent to ${emailInput.trim()}`);
+    } catch (err) {
+      setEmailStatus("error");
+      setEmailFeedback(err.response?.data?.message || err.message || "Email delivery failed.");
+    }
+  };
 
   return (
     <div id="project-workspace-shell" className="space-y-5 font-sans">
@@ -275,6 +378,149 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
           style={{ width: `${progressPercent}%` }}
         />
       </div>
+
+      {/* Phase 8: Export, Delivery & Blueprint Packaging Bar */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 px-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 flex-shrink-0">
+            <Download size={15} />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+              Investor Blueprint Deliverables
+              <Badge tone={completedCount === 11 ? "completed" : "pending"}>
+                {completedCount === 11 ? "All 11 Reports Ready" : `${completedCount}/11 Reports Ready`}
+              </Badge>
+            </h4>
+            <p className="text-[11px] text-muted-foreground">
+              Export comprehensive business plan with health score, financial models, architecture, and GTM strategy.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Download PDF */}
+          <Button
+            id="export-pdf-btn"
+            variant="secondary"
+            size="sm"
+            onClick={handleExportPdf}
+            disabled={isExporting}
+            className={`text-xs transition-all ${
+              exportState.pdf === "success" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : ""
+            }`}
+          >
+            {exportState.pdf === "loading" ? (
+              <RefreshCw size={13} className="animate-spin text-teal-700" />
+            ) : exportState.pdf === "success" ? (
+              <Check size={13} className="text-emerald-600" />
+            ) : (
+              <FileText size={13} className="text-teal-700" />
+            )}
+            {exportState.pdf === "loading"
+              ? "Generating PDF..."
+              : exportState.pdf === "success"
+              ? "PDF Downloaded"
+              : "Download PDF"}
+          </Button>
+
+          {/* Download Markdown */}
+          <Button
+            id="export-markdown-btn"
+            variant="secondary"
+            size="sm"
+            onClick={handleExportMarkdown}
+            disabled={isExporting}
+            className={`text-xs transition-all ${
+              exportState.markdown === "success" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : ""
+            }`}
+          >
+            {exportState.markdown === "loading" ? (
+              <RefreshCw size={13} className="animate-spin text-teal-700" />
+            ) : exportState.markdown === "success" ? (
+              <Check size={13} className="text-emerald-600" />
+            ) : (
+              <FileCode size={13} className="text-teal-700" />
+            )}
+            {exportState.markdown === "loading"
+              ? "Generating MD..."
+              : exportState.markdown === "success"
+              ? "MD Downloaded"
+              : "Download Markdown"}
+          </Button>
+
+          {/* Download JSON */}
+          <Button
+            id="export-json-btn"
+            variant="secondary"
+            size="sm"
+            onClick={handleExportJson}
+            disabled={isExporting}
+            className={`text-xs transition-all ${
+              exportState.json === "success" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : ""
+            }`}
+          >
+            {exportState.json === "loading" ? (
+              <RefreshCw size={13} className="animate-spin text-teal-700" />
+            ) : exportState.json === "success" ? (
+              <Check size={13} className="text-emerald-600" />
+            ) : (
+              <Code size={13} className="text-teal-700" />
+            )}
+            {exportState.json === "loading"
+              ? "Preparing JSON..."
+              : exportState.json === "success"
+              ? "JSON Downloaded"
+              : "Download JSON"}
+          </Button>
+
+          {/* Email Blueprint */}
+          <Button
+            id="open-email-modal-btn"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setShowEmailModal(true);
+              setEmailStatus("idle");
+              setEmailFeedback("");
+            }}
+            disabled={isExporting}
+            className="text-xs border-teal-200 text-teal-800 hover:bg-teal-50"
+          >
+            <Mail size={13} className="text-teal-700" />
+            Email Reports
+          </Button>
+        </div>
+      </div>
+
+      {/* Export Feedback Toast/Alert */}
+      {exportFeedback && (
+        <div
+          id="export-feedback-banner"
+          className={`text-xs p-3 rounded-xl flex items-center justify-between gap-3 border shadow-sm ${
+            exportFeedback.type === "success"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-rose-50 border-rose-200 text-rose-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {exportFeedback.type === "success" ? (
+              <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+            ) : (
+              <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
+            )}
+            <span>{exportFeedback.message}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExportFeedback(null)}
+            className="text-xs"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {/* Mutation Error Feedback Banner */}
       {runMutation.isError && (
@@ -440,6 +686,97 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
                 Start Auto Mode
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 8: Email Blueprint Delivery Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 font-sans">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center text-teal-700 flex-shrink-0">
+                <Mail size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Email Venture Blueprint</h3>
+                <p className="text-xs text-muted-foreground">PDF & Markdown Attachments</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              We will package the latest deliverable reports, health scorecard, and executive summary for <strong>{project.startupName}</strong> into formatted PDF and Markdown attachments and dispatch them via email.
+            </p>
+
+            <form onSubmit={handleSendEmail} className="space-y-3">
+              <div>
+                <label htmlFor="export-email-input" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Recipient Email Address *
+                </label>
+                <input
+                  id="export-email-input"
+                  type="email"
+                  required
+                  placeholder="founder@example.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  disabled={emailStatus === "loading"}
+                  className="w-full h-10 px-3 text-xs rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-teal-600 bg-white"
+                />
+              </div>
+
+              {emailFeedback && (
+                <div
+                  id="email-feedback-status"
+                  className={`text-xs p-3 rounded-lg border flex items-center gap-2 ${
+                    emailStatus === "success"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800"
+                  }`}
+                >
+                  {emailStatus === "success" ? (
+                    <CheckCircle2 size={15} className="text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle size={15} className="text-rose-600 flex-shrink-0" />
+                  )}
+                  <span>{emailFeedback}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  id="cancel-email-modal-btn"
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowEmailModal(false)}
+                  disabled={emailStatus === "loading"}
+                  className="text-xs"
+                >
+                  {emailStatus === "success" ? "Close" : "Cancel"}
+                </Button>
+                {emailStatus !== "success" && (
+                  <Button
+                    id="send-email-submit-btn"
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    disabled={emailStatus === "loading" || !emailInput.trim()}
+                    className="text-xs bg-teal-700 hover:bg-teal-800"
+                  >
+                    {emailStatus === "loading" ? (
+                      <>
+                        <RefreshCw size={13} className="animate-spin" /> Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send size={13} /> Send Blueprint
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </form>
           </div>
         </div>
       )}

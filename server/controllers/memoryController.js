@@ -6,7 +6,7 @@ import { searchMemory } from "../services/memoryService.js";
  */
 export async function queryMemory(req, res, next) {
   try {
-    const query = String(req.query.q || req.query.query || "").trim();
+    const query = String(req.query.q || req.query.query || req.body?.q || req.body?.query || "").trim();
     if (query.length < 2 || query.length > 500) {
       return res.status(400).json({
         ok: false,
@@ -15,9 +15,13 @@ export async function queryMemory(req, res, next) {
       });
     }
 
-    const projectId = req.query.projectId ? String(req.query.projectId).trim() : undefined;
-    const agentKey = req.query.agentKey || req.query.reportType ? String(req.query.agentKey || req.query.reportType).trim() : undefined;
-    const limit = req.query.limit ? Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10)) : 10;
+    const projectId = (req.query.projectId || req.body?.projectId) ? String(req.query.projectId || req.body?.projectId).trim() : undefined;
+    const agentKey = (req.query.agentKey || req.query.reportType || req.body?.agentKey || req.body?.reportType)
+      ? String(req.query.agentKey || req.query.reportType || req.body?.agentKey || req.body?.reportType).trim()
+      : undefined;
+    const limit = (req.query.limit || req.body?.limit)
+      ? Math.min(50, Math.max(1, parseInt(req.query.limit || req.body?.limit, 10) || 10))
+      : 10;
 
     const results = await searchMemory(req.user.id, query, { projectId, agentKey, limit });
 

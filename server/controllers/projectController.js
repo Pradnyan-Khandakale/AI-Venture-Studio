@@ -26,9 +26,9 @@ export async function createProject(req, res, next) {
       idea: body.idea.trim(),
       industry: body.industry.trim(),
       targetUsers: body.targetUsers.trim(),
-      country: body.country?.trim() || "United States",
-      budget: body.budget?.trim() || "",
-      timeline: body.timeline?.trim() || ""
+      country: typeof body.country === "string" ? body.country.trim() : (body.country ? String(body.country) : "United States"),
+      budget: typeof body.budget === "string" ? body.budget.trim() : (body.budget != null ? String(body.budget) : ""),
+      timeline: typeof body.timeline === "string" ? body.timeline.trim() : (body.timeline != null ? String(body.timeline) : "")
     });
 
     return res.status(201).json(project);
@@ -166,4 +166,59 @@ export async function updateAgentReport(req, res, next) {
   }
 }
 
-export const emailProject = (_req, res) => res.status(501).json({ message: "Email project is not implemented yet" });
+import { sendProjectEmail } from "../services/emailService.js";
+
+export async function emailProject(req, res, next) {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const email = (body.email || body.to || "").trim();
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        message: "Recipient email address is required",
+        status: 400
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        ok: false,
+        message: "A valid recipient email address is required (e.g. founder@example.com)",
+        status: 400
+      });
+    }
+
+    const project = await findProjectOr404(id, req.user.id, res);
+    if (!project) return;
+
+    const result = await sendProjectEmail(id, req.user.id, email);
+
+    if (!result.configured) {
+      return res.status(503).json({
+        ok: false,
+        message: "Email delivery is not configured. Configure SMTP_HOST in server environment.",
+        status: 503
+      });
+    }
+
+    if (!result.sent) {
+      return res.status(500).json({
+        ok: false,
+        message: result.message || "Failed to deliver email",
+        status: 500
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: `Venture blueprint successfully sent to ${email}`,
+      recipient: email,
+      messageId: result.messageId
+    });
+  } catch (error) {
+    next(error);
+  }
+}
