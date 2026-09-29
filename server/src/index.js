@@ -64,6 +64,13 @@ app.use((req, _res, next) => {
 // Centralized error handling
 app.use(errorHandler);
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[Server UnhandledRejection]", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("[Server UncaughtException]", error);
+});
+
 
 // Database connection & Server initialization
 export async function startServer() {

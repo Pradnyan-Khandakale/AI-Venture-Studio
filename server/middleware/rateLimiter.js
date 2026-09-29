@@ -8,12 +8,9 @@ class MemoryRateLimiter {
   constructor() {
     this.hits = new Map(); // key -> [timestamps]
     this.inFlight = new Set(); // operation keys currently being processed
-    // Periodically prune stale entries every 5 minutes to prevent memory growth
-    setInterval(() => this.prune(), 5 * 60 * 1000).unref();
   }
 
-  prune() {
-    const now = Date.now();
+  prune(now) {
     for (const [key, timestamps] of this.hits.entries()) {
       const fresh = timestamps.filter((t) => now - t < 10 * 60 * 1000);
       if (fresh.length === 0) {
@@ -56,6 +53,9 @@ class MemoryRateLimiter {
 
       // 2. Check window rate limit
       const now = Date.now();
+      if (this.hits.size > 200) {
+        this.prune(now);
+      }
       const userTimestamps = this.hits.get(clientKey) || [];
       const windowStart = now - windowMs;
       const recentHits = userTimestamps.filter((t) => t > windowStart);

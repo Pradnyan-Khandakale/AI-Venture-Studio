@@ -7,8 +7,7 @@ export async function seedDemoUser() {
   try {
     const existing = await User.findOne({ email: "founder@example.com" });
     if (!existing) {
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash("password123", salt);
+      const passwordHash = await bcrypt.hash("password123", 10);
       await User.create({
         name: "Founder",
         email: "founder@example.com",

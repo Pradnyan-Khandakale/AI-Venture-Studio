@@ -1,9 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
 import {
-  Activity,
   LayoutDashboard,
   LogOut,
-  ShieldCheck,
   Sparkles,
   UserCheck,
   Users,
@@ -17,33 +15,15 @@ import BoardroomPage from "./pages/BoardroomPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import MemoryPage from "./pages/MemoryPage.jsx";
 import { useStudioStore } from "./store/useStudioStore.js";
-import { authApi } from "./services/api.js";
 import { Button } from "./components/ui/Button.jsx";
 
 export default function App() {
   const { auth, logout, selectedProjectId, setSelectedProject, activeView, setActiveView } = useStudioStore();
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [meResult, setMeResult] = useState(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verifyError, setVerifyError] = useState(null);
 
   // Authentication gate: unauthenticated users see AuthPage
   if (!auth.token || !auth.user) {
     return <AuthPage />;
   }
-
-  const verifyMe = async () => {
-    setIsVerifying(true);
-    setVerifyError(null);
-    try {
-      const data = await authApi.me();
-      setMeResult(data);
-    } catch (err) {
-      setVerifyError(err.response?.data?.message || err.message);
-    } finally {
-      setIsVerifying(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 sm:p-8">
@@ -134,19 +114,6 @@ export default function App() {
               <span className="text-slate-400">({auth.user.email})</span>
             </div>
 
-            {/* Diagnostics toggle for Phase 2 /me testing */}
-            <Button
-              id="toggle-diagnostics-btn"
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowDiagnostics(!showDiagnostics)}
-              className="text-xs"
-              title="Toggle JWT Diagnostics"
-            >
-              <ShieldCheck size={14} className="text-teal-600" />
-              Auth Diag
-            </Button>
-
             {/* Sign out */}
             <Button
               id="logout-btn"
@@ -160,38 +127,6 @@ export default function App() {
             </Button>
           </div>
         </header>
-
-        {/* Collapsible Session / Diagnostics Bar for Phase 2 Regression Checks */}
-        {showDiagnostics && (
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                <Activity size={16} className="text-teal-600" />
-                <span>Protected Route Diagnostic (GET /api/auth/me)</span>
-              </div>
-              <Button
-                id="verify-token-btn"
-                variant="secondary"
-                size="sm"
-                onClick={verifyMe}
-                disabled={isVerifying}
-                className="text-xs"
-              >
-                <RefreshCw size={12} className={isVerifying ? "animate-spin" : ""} />
-                Test /api/auth/me
-              </Button>
-            </div>
-            <pre className="bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">
-              {isVerifying
-                ? "Validating Bearer token..."
-                : meResult
-                ? JSON.stringify(meResult, null, 2)
-                : verifyError
-                ? `Error: ${verifyError}`
-                : 'Click "Test /api/auth/me" to test token authentication.'}
-            </pre>
-          </div>
-        )}
 
         {/* Main View Router */}
         <main>

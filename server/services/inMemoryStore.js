@@ -19,8 +19,7 @@ export function isMemoryMode() {
 export async function seedMemoryStore() {
   const existing = memory.findUserByEmail("founder@example.com");
   if (!existing) {
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash("password123", salt);
+    const passwordHash = await bcrypt.hash("password123", 10);
     const demoUser = {
       _id: "demo-user-id",
       id: "demo-user-id",
@@ -52,8 +51,7 @@ export const memory = {
   createUser: async ({ name, email, password, passwordHash }) => {
     let hash = passwordHash;
     if (!hash && password) {
-      const salt = await bcrypt.genSalt(10);
-      hash = await bcrypt.hash(password, salt);
+      hash = await bcrypt.hash(password, 10);
     }
     const id = randomUUID();
 
