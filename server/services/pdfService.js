@@ -190,7 +190,16 @@ export function buildVenturePdf(report, stream = null) {
       // 3. AGENT DELIVERABLE REPORT SECTIONS
       // ==========================================
       sections.forEach((sec, idx) => {
-        doc.addPage();
+        // Page setup: fresh page for available deliverables; compact spacing for pending ones
+        if (!sec.available) {
+          if (doc.y + 120 > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+          } else if (idx > 0) {
+            doc.moveDown(1.5);
+          }
+        } else {
+          doc.addPage();
+        }
 
         // Section Header Block
         doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f766e").text(`SECTION ${idx + 1} OF ${sections.length}  |  ${sec.outputFile.toUpperCase()}`, { characterSpacing: 1 });
@@ -198,12 +207,12 @@ export function buildVenturePdf(report, stream = null) {
         doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(sec.name);
         doc.moveDown(0.3);
 
-        const statusText = sec.available
-          ? sec.approved
-            ? "Status: Approved Deliverable"
-            : "Status: Completed (Awaiting Founder Review)"
-          : "Status: Pending Generation";
-        doc.font("Helvetica-Bold").fontSize(9).fillColor(sec.available ? (sec.approved ? "#059669" : "#d97706") : "#94a3b8").text(statusText);
+        const [statusLabel, statusColor] = !sec.available
+          ? ["Status: Pending Generation", "#94a3b8"]
+          : sec.approved
+          ? ["Status: Approved Deliverable", "#059669"]
+          : ["Status: Completed (Awaiting Founder Review)", "#d97706"];
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(statusColor).text(statusLabel);
 
         doc.moveDown(0.5);
         doc.rect(54, doc.y, contentWidth, 1).fill("#e2e8f0");
@@ -211,17 +220,30 @@ export function buildVenturePdf(report, stream = null) {
 
         if (!sec.available) {
           doc
-            .roundedRect(54, doc.y, contentWidth, 60, 4)
+            .roundedRect(54, doc.y, contentWidth, 50, 4)
             .fillAndStroke("#f8fafc", "#e2e8f0");
-          doc.fillColor("#64748b").font("Helvetica-Oblique").fontSize(10).text(
+          doc.fillColor("#64748b").font("Helvetica-Oblique").fontSize(9.5).text(
             `Deliverable ${sec.outputFile} is currently unavailable. This agent has not completed execution in the AI Venture Studio workflow pipeline.`,
             70,
-            doc.y - 45,
+            doc.y - 38,
             { width: contentWidth - 32, lineGap: 3 }
           );
-          doc.moveDown(4);
+          doc.moveDown(3);
           return;
         }
+
+        // Helper to prevent orphaned headings near bottom margin
+        const ensureSpace = (neededHeight = 45) => {
+          if (doc.y + neededHeight > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+          }
+        };
+
+        const headingStyles = {
+          "# ": [14, 50, "#0f172a", 0.6],
+          "## ": [12, 45, "#1e293b", 0.5],
+          "### ": [10, 35, "#334155", 0.4]
+        };
 
         // Render clean parsed report content line by line
         const lines = (sec.content || "").split("\n");
@@ -237,28 +259,25 @@ export function buildVenturePdf(report, stream = null) {
           }
 
           if (inCodeBlock) {
-            doc.font("Courier").fontSize(8.5).fillColor("#0f172a").text(line, { indent: 10, lineGap: 1 });
+            ensureSpace(16);
+            doc.font("Courier").fontSize(8.5).fillColor("#0f172a").text(line, { indent: 10, lineGap: 1, width: contentWidth - 20 });
             continue;
           }
 
           if (!line.trim()) {
-            doc.moveDown(0.5);
+            doc.moveDown(0.4);
             continue;
           }
 
-          // Markdown H1 / H2 / H3
-          if (line.startsWith("# ")) {
-            doc.moveDown(0.8);
-            doc.font("Helvetica-Bold").fontSize(14).fillColor("#0f172a").text(cleanMarkdownText(line));
+          // Markdown H1 / H2 / H3 with space-checking
+          const prefix = line.startsWith("# ") ? "# " : line.startsWith("## ") ? "## " : line.startsWith("### ") ? "### " : null;
+          if (prefix) {
+            const [fontSize, space, color, moveDown] = headingStyles[prefix];
+            ensureSpace(space);
+            doc.moveDown(moveDown);
+            doc.font("Helvetica-Bold").fontSize(fontSize).fillColor(color).text(cleanMarkdownText(line), { width: contentWidth });
             doc.moveDown(0.3);
-          } else if (line.startsWith("## ")) {
-            doc.moveDown(0.6);
-            doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e293b").text(cleanMarkdownText(line));
-            doc.moveDown(0.3);
-          } else if (line.startsWith("### ")) {
-            doc.moveDown(0.4);
-            doc.font("Helvetica-Bold").fontSize(10).fillColor("#334155").text(cleanMarkdownText(line));
-            doc.moveDown(0.2);
+            continue;
           } else if (/^[-*+]\s+/.test(line.trim())) {
             // Bullet list item
             const cleanBullet = cleanMarkdownText(line.replace(/^[-*+]\s+/, ""));
@@ -277,7 +296,7 @@ export function buildVenturePdf(report, stream = null) {
             });
           } else if (line.trim().startsWith("|")) {
             // Table row: render formatted monospace
-            doc.font("Courier").fontSize(8).fillColor("#1e293b").text(line.trim(), { indent: 5 });
+            doc.font("Courier").fontSize(8).fillColor("#1e293b").text(line.trim(), { indent: 5, width: contentWidth - 10 });
           } else {
             // Standard paragraph
             doc.font("Helvetica").fontSize(9.5).fillColor("#334155").text(cleanMarkdownText(line), {
@@ -326,18 +345,24 @@ export function buildVenturePdf(report, stream = null) {
       // 5. TWO-PASS HEADERS & FOOTERS (PAGE NUMBERS)
       // ==========================================
       const range = doc.bufferedPageRange();
-      for (let i = range.start; i < range.start + range.count; i++) {
+      const totalPages = range.count;
+
+      for (let i = range.start; i < range.start + totalPages; i++) {
         doc.switchToPage(i);
 
         // Omit headers and footers on cover page
         if (i === 0) continue;
+
+        // Temporarily zero the bottom margin to strictly prevent footer text from triggering an auto-pagebreak
+        const prevBottom = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
 
         // Running Header
         doc.font("Helvetica").fontSize(7.5).fillColor("#94a3b8").text(
           `AI Venture Studio  |  ${project.startupName} — Blueprint`,
           54,
           30,
-          { width: contentWidth, align: "left" }
+          { width: contentWidth, align: "left", lineBreak: false }
         );
         doc.rect(54, 42, contentWidth, 0.5).fill("#e2e8f0");
 
@@ -347,14 +372,17 @@ export function buildVenturePdf(report, stream = null) {
           "CONFIDENTIAL  —  PREPARED FOR FOUNDER & INVESTORS",
           54,
           doc.page.height - 30,
-          { width: contentWidth / 2, align: "left" }
+          { width: contentWidth / 2, align: "left", lineBreak: false }
         );
         doc.font("Helvetica-Bold").fontSize(8).fillColor("#64748b").text(
-          `Page ${i + 1} of ${range.count}`,
+          `Page ${i + 1} of ${totalPages}`,
           54 + contentWidth / 2,
           doc.page.height - 30,
-          { width: contentWidth / 2, align: "right" }
+          { width: contentWidth / 2, align: "right", lineBreak: false }
         );
+
+        // Restore original margins
+        doc.page.margins.bottom = prevBottom;
       }
 
       // Finalize document stream

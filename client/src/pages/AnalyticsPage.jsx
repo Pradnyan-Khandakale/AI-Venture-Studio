@@ -5,7 +5,11 @@ import {
   Coins,
   ListChecks,
   Sparkles,
-  TrendingUp
+  TrendingUp,
+  Building2,
+  Filter,
+  RefreshCw,
+  CheckCircle2
 } from "lucide-react";
 import { useQuery } from "react-query";
 import {
@@ -25,6 +29,7 @@ import {
 } from "recharts";
 import { Card } from "../components/ui/Card.jsx";
 import { Button } from "../components/ui/Button.jsx";
+import { Badge } from "../components/ui/Badge.jsx";
 import { analyticsApi, projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 

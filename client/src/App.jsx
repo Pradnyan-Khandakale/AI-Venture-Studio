@@ -36,8 +36,8 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Venture Studio</h1>
-              <p className="text-xs uppercase tracking-wider font-semibold text-teal-700">
-                Phase 8: Production Studio
+              <p className="text-xs font-medium text-slate-500">
+                Turn ideas into investor-ready ventures
               </p>
             </div>
           </div>

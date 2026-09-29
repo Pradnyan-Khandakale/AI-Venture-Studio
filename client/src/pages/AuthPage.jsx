@@ -55,7 +55,7 @@ export default function AuthPage() {
             </div>
             <div className="max-w-xl">
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">
-                Phase 2: Authentication
+                Multi-Agent Venture Creation
               </p>
               <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
                 Turn an early idea into an investor-ready blueprint.

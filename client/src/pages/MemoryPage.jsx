@@ -6,7 +6,12 @@ import {
   ExternalLink,
   Filter,
   Database,
-  X
+  X,
+  Tag,
+  Building2,
+  FileText,
+  Calendar,
+  ArrowRight
 } from "lucide-react";
 import { useQuery } from "react-query";
 import { Card } from "../components/ui/Card.jsx";

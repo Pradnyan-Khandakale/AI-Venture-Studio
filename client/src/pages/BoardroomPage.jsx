@@ -143,7 +143,7 @@ export default function BoardroomPage({ onBack }) {
             >
               <ArrowLeft size={13} /> Studio Workspace
             </Button>
-            <Badge tone="running">Phase 6: Executive Boardroom</Badge>
+            <Badge tone="running">Executive Boardroom</Badge>
             {project?.startupName && (
               <span className="text-xs font-semibold text-slate-500 truncate">
                 {project.startupName}
