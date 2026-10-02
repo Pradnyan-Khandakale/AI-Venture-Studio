@@ -1,7 +1,8 @@
 import axios from "axios";
 import { useStudioStore } from "../store/useStudioStore.js";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const rawApiUrl = import.meta.env.VITE_API_URL || "/api";
+export const API_BASE_URL = rawApiUrl.endsWith("/") ? rawApiUrl.replace(/\/+$/, "") : rawApiUrl;
 
 const api = axios.create({
   baseURL: API_BASE_URL,

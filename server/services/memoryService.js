@@ -17,6 +17,10 @@ const getChromaClient = () => (chromaClient ??= new ChromaClient({ path: chromaP
  * Caches positive or negative response to avoid blocking recurring queries.
  */
 export async function checkChromaHealth() {
+  if (!process.env.CHROMA_URL) {
+    isChromaAvailable = false;
+    return false;
+  }
   const now = Date.now();
   if (isChromaAvailable !== null && now - lastChromaCheckTime < CHROMA_HEALTH_CACHE_MS) {
     return isChromaAvailable;

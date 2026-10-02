@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function freePort5000() {
+  if (process.platform !== "win32") return;
   try {
     const out = execSync("netstat -ano -p tcp | findstr :5000", { encoding: "utf8" });
     for (const line of out.split("\n")) {
@@ -22,11 +23,14 @@ function backendRunner() {
   return {
     name: "backend-runner",
     configureServer() {
+      if (process.env.VITE_DISABLE_AUTO_BACKEND === "true") return;
       freePort5000();
-      spawn("node", ["src/index.js"], {
-        cwd: path.resolve(__dirname, "../server"),
-        stdio: "inherit"
-      });
+      try {
+        spawn("node", ["src/index.js"], {
+          cwd: path.resolve(__dirname, "../server"),
+          stdio: "inherit"
+        });
+      } catch (_) {}
     }
   };
 }

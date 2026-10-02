@@ -48,12 +48,20 @@ export function getProviderInfo() {
 export async function generateText(prompt, options = {}) {
   const provider = getActiveProvider();
 
-  if (provider === "gemini") {
-    return geminiProvider.generate(prompt, options);
+  if (provider === "ollama") {
+    try {
+      return await ollamaProvider.generate(prompt, options);
+    } catch (error) {
+      if (process.env.GEMINI_API_KEY) {
+        console.warn(`[LLMService] Ollama unavailable (${error.message}). Falling back to Gemini.`);
+        return geminiProvider.generate(prompt, options);
+      }
+      throw error;
+    }
   }
 
-  if (provider === "ollama") {
-    return ollamaProvider.generate(prompt, options);
+  if (provider === "gemini" || !provider) {
+    return geminiProvider.generate(prompt, options);
   }
 
   throw new Error(

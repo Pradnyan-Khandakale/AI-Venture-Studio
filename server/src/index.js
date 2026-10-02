@@ -21,11 +21,43 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 const app = express();
 const port = process.env.PORT || 5000;
 
-// CORS configuration
+// CORS configuration: Support CLIENT_URL (Vercel) and CORS_ORIGIN with development fallbacks
+const configuredOrigins = [
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
+  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : [])
+]
+  .map((s) => s.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+const devOrigins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()) : true,
-    credentials: true
+    origin: (origin, callback) => {
+      // Allow requests with no origin (curl, server-to-server, Render health checks)
+      if (!origin) return callback(null, true);
+
+      const isDev = process.env.NODE_ENV !== "production";
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+
+      if (configuredOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      if (isDev && devOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      // In development without explicit config, permit origin
+      if (isDev && configuredOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin ${origin} not allowed by CORS policy`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
@@ -75,12 +107,16 @@ process.on("uncaughtException", (error) => {
 // Database connection & Server initialization
 export async function startServer() {
   await connectDatabase();
-  return app.listen(port, () => {
-    console.log(`[Server] AI Venture Studio running on http://localhost:${port}`);
+  const host = "0.0.0.0";
+  return app.listen(port, host, () => {
+    console.log(`[Server] AI Venture Studio running on http://${host}:${port} (NODE_ENV: ${process.env.NODE_ENV || "development"})`);
   });
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const isMain =
+  process.argv[1] &&
+  (fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
+    fileURLToPath(import.meta.url).toLowerCase() === path.resolve(process.argv[1]).toLowerCase());
 if (isMain) {
   startServer();
 }
