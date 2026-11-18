@@ -27,9 +27,15 @@ export const projectService = {
 
   async listProjectsForUser(userId) {
     if (isMemoryMode()) {
-      return memory.listProjects(userId);
+      return memory.listProjects(userId).map((project) => ({
+        ...project,
+        agentRuns: (project.agentRuns || []).map(({ report: _report, ...run }) => run)
+      }));
     }
-    return Project.find({ user: userId }).sort({ updatedAt: -1 });
+    return Project.find({ user: userId })
+      .select("-agentRuns.report")
+      .sort({ updatedAt: -1 })
+      .lean();
   },
 
   async getProjectForUser(id, userId) {

@@ -110,4 +110,6 @@ const projectSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+projectSchema.index({ user: 1, updatedAt: -1 });
+
 export default mongoose.model("Project", projectSchema);

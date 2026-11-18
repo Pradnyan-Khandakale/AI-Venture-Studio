@@ -17,8 +17,10 @@ export async function getOverviewAnalytics(userId) {
     projects = memory.listProjects(uid);
     boardroomSessions = memory.boardroomSessions.filter((s) => String(s.user) === uid);
   } else {
-    projects = await Project.find({ user: uid }).lean();
-    boardroomSessions = await BoardroomSession.find({ user: uid }).lean();
+    [projects, boardroomSessions] = await Promise.all([
+      Project.find({ user: uid }).select("-agentRuns.report").lean(),
+      BoardroomSession.find({ user: uid }).select("tokenUsage project user").lean()
+    ]);
   }
 
   // 1. Projects Breakdown
@@ -229,7 +231,9 @@ export async function getProjectAnalytics(projectId, userId) {
   if (isMemoryMode()) {
     boardroomSessions = memory.listBoardroomSessions(pid, uid);
   } else {
-    boardroomSessions = await BoardroomSession.find({ project: pid, user: uid }).lean();
+    boardroomSessions = await BoardroomSession.find({ project: pid, user: uid })
+      .select("tokenUsage")
+      .lean();
   }
 
   const runs = project.agentRuns || [];

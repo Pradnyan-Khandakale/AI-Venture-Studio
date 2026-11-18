@@ -1,18 +1,50 @@
-import { Brain, Lock, Mail, UserPlus, LogIn, KeyRound } from "lucide-react";
+import {
+  AlertCircle,
+  Brain,
+  KeyRound,
+  Lock,
+  LogIn,
+  Mail,
+  RefreshCw,
+  Server,
+  UserPlus
+} from "lucide-react";
 import { useState } from "react";
 import { useMutation } from "react-query";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { authApi } from "../services/api";
+import { authApi, getApiErrorMessage } from "../services/api";
+import { waitForBackendReady } from "../services/backendLifecycle";
+import { useAppStore } from "../store/useAppStore";
 import { useStudioStore } from "../store/useStudioStore";
 
 export default function AuthPage() {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", email: "founder@example.com", password: "password123" });
   const setAuth = useStudioStore((state) => state.setAuth);
+  const {
+    backendStatus,
+    elapsedSeconds,
+    error: backendError,
+    sessionMessage,
+    clearSessionMessage,
+    setHealthData
+  } = useAppStore();
 
   const mutation = useMutation(
-    (formData) => {
+    async (formData) => {
+      // If the backend is currently waking up or not yet verified, wait for readiness first
+      // so the non-idempotent POST auth request doesn't hit a sleeping Render container.
+      if (backendStatus !== "ready") {
+        const ready = await waitForBackendReady({ force: backendStatus === "unavailable" });
+        if (!ready) {
+          throw new Error(
+            useAppStore.getState().error ||
+              "The server is still starting up or unreachable. Please retry in a moment."
+          );
+        }
+      }
+
       if (mode === "login") {
         return authApi.login({ email: formData.email, password: formData.password });
       }
@@ -21,6 +53,10 @@ export default function AuthPage() {
     {
       onSuccess: (data) => {
         if (data?.token && data?.user) {
+          clearSessionMessage();
+          if (useAppStore.getState().backendStatus !== "ready") {
+            setHealthData({ ok: true, ready: true });
+          }
           setAuth(data);
         }
       }
@@ -29,11 +65,14 @@ export default function AuthPage() {
 
   const submit = (event) => {
     event.preventDefault();
+    if (mutation.isLoading) return;
+    clearSessionMessage();
     mutation.mutate(form);
   };
 
   const switchMode = (newMode) => {
     mutation.reset();
+    clearSessionMessage();
     setMode(newMode);
     if (newMode === "login") {
       setForm({ name: "", email: "founder@example.com", password: "password123" });
@@ -41,6 +80,9 @@ export default function AuthPage() {
       setForm({ name: "Jane Founder", email: "jane@example.com", password: "password123" });
     }
   };
+
+  const isWaking = backendStatus === "waking";
+  const isUnavailable = backendStatus === "unavailable";
 
   return (
     <main className="grid min-h-screen place-items-center px-4 py-10 bg-slate-50">
@@ -61,7 +103,7 @@ export default function AuthPage() {
                 Turn an early idea into an investor-ready blueprint.
               </h1>
               <p className="mt-4 max-w-lg text-sm leading-6 text-slate-300">
-                Secure local-first authentication backed by JWT, bcrypt password hashing, and seamless in-memory fallback.
+                Secure JWT authentication backed by MongoDB Atlas and a 11-agent Gemini AI venture creation studio.
               </p>
             </div>
             <div className="rounded-lg bg-slate-900/80 p-3.5 border border-slate-800 text-xs space-y-1.5 text-slate-300">
@@ -77,7 +119,6 @@ export default function AuthPage() {
                 </button>
               </div>
               <p className="font-mono text-[11px] text-slate-400">
-
                 Email: <span className="text-slate-200">founder@example.com</span> | Password:{" "}
                 <span className="text-slate-200">password123</span>
               </p>
@@ -86,6 +127,55 @@ export default function AuthPage() {
 
           <section className="p-6 sm:p-8 flex flex-col justify-center">
             <Card className="border-0 p-0 shadow-none">
+              {/* Cold-start server wake-up notice */}
+              {isWaking && (
+                <div
+                  id="server-waking-banner"
+                  className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 flex items-start gap-2.5"
+                >
+                  <Server size={15} className="text-amber-700 flex-shrink-0 mt-0.5 animate-pulse" />
+                  <div className="space-y-0.5">
+                    <p className="font-semibold">Starting the server. This may take a moment.</p>
+                    <p className="text-[11px] text-amber-800">
+                      The backend is waking up from sleep{elapsedSeconds > 0 ? ` (${elapsedSeconds}s)` : ""}. You can fill in your details while it finishes starting.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Server unreachable notice with manual retry */}
+              {isUnavailable && (
+                <div
+                  id="server-unavailable-banner"
+                  className="mb-4 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 space-y-2"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={15} className="text-rose-600 flex-shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      {backendError || "Unable to connect to the server right now."}
+                    </p>
+                  </div>
+                  <Button
+                    id="retry-server-wake-btn"
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => waitForBackendReady({ force: true })}
+                    className="text-xs border-rose-200 text-rose-700 hover:bg-rose-100"
+                  >
+                    <RefreshCw size={12} />
+                    Retry Connection
+                  </Button>
+                </div>
+              )}
+
+              {/* Session expired notice */}
+              {sessionMessage && !mutation.isError && (
+                <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-900 font-medium">
+                  {sessionMessage}
+                </div>
+              )}
+
               <div className="mb-6">
                 <div className="flex rounded-lg bg-slate-100 p-1 mb-4">
                   <button
@@ -113,7 +203,7 @@ export default function AuthPage() {
                 <p className="mt-1 text-xs text-slate-500">
                   {mode === "login"
                     ? "Enter your credentials or use the seeded demo account."
-                    : "Register a new local founder account."}
+                    : "Register a new founder account."}
                 </p>
               </div>
 
@@ -165,7 +255,7 @@ export default function AuthPage() {
 
                 {mutation.isError && (
                   <div className="rounded-md bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-700 font-medium">
-                    {mutation.error?.response?.data?.message || mutation.error?.message || "Authentication failed"}
+                    {getApiErrorMessage(mutation.error, "Authentication failed. Please check your credentials and try again.")}
                   </div>
                 )}
 
@@ -174,9 +264,21 @@ export default function AuthPage() {
                   className="w-full h-10 mt-2"
                   disabled={mutation.isLoading}
                 >
-                  {mode === "login" ? <LogIn size={16} /> : <UserPlus size={16} />}
+                  {mutation.isLoading ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : mode === "login" ? (
+                    <LogIn size={16} />
+                  ) : (
+                    <UserPlus size={16} />
+                  )}
                   <span>
-                    {mutation.isLoading ? "Authenticating..." : mode === "login" ? "Sign In" : "Create Account"}
+                    {mutation.isLoading
+                      ? isWaking
+                        ? "Starting the server..."
+                        : "Authenticating..."
+                      : mode === "login"
+                      ? "Sign In"
+                      : "Create Account"}
                   </span>
                 </Button>
               </form>

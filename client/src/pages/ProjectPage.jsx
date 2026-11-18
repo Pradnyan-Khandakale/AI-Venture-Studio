@@ -32,7 +32,7 @@ import { Card } from "../components/ui/Card.jsx";
 import { WorkflowGraph } from "../components/workflow/WorkflowGraph.jsx";
 import { StepListView } from "../components/workflow/StepListView.jsx";
 import { ReportViewer } from "../components/reports/ReportViewer.jsx";
-import { projectApi, exportApi } from "../services/api.js";
+import { exportApi, getApiErrorMessage, projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
 export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }) {
@@ -43,6 +43,7 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   const [viewMode, setViewMode] = useState("canvas"); // "canvas" | "list"
   const [showAutoConfirm, setShowAutoConfirm] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
+  const [isAutoExecuting, setIsAutoExecuting] = useState(false);
 
   // Phase 8: Export and Email delivery state
   const [exportState, setExportState] = useState({
@@ -56,17 +57,19 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   const [emailStatus, setEmailStatus] = useState("idle"); // "idle" | "loading" | "success" | "error"
   const [emailFeedback, setEmailFeedback] = useState("");
 
-  // Poll project state dynamically: accelerate polling while running
-  const { data: project, isLoading, isError, error } = useQuery(
+  // Poll project state ONLY while an agent run is actively executing (no idle polling)
+  const { data: project, isLoading, isError, error, refetch } = useQuery(
     ["project", selectedProjectId],
     () => projectApi.get(selectedProjectId),
     {
       enabled: Boolean(selectedProjectId),
+      staleTime: 30 * 1000,
       refetchInterval: (data) => {
         const isRunning =
+          isAutoExecuting ||
           data?.status === "running" ||
           (data?.agentRuns || []).some((r) => r.status === "running");
-        return isRunning ? 1200 : 4000;
+        return isRunning ? 2000 : false;
       }
     }
   );
@@ -86,9 +89,15 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   const runMutation = useMutation(
     (autoMode) => projectApi.run(selectedProjectId, autoMode),
     {
+      onMutate: (autoMode) => {
+        if (autoMode) setIsAutoExecuting(true);
+      },
       onSuccess: (updated) => {
         queryClient.setQueryData(["project", selectedProjectId], updated);
         queryClient.invalidateQueries("projects");
+      },
+      onSettled: () => {
+        setIsAutoExecuting(false);
       }
     }
   );
@@ -140,16 +149,28 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
   }
 
   if (isError || !project) {
+    const isNotFound = error?.response?.status === 404;
     return (
       <Card className="p-10 text-center space-y-4 font-sans">
         <AlertCircle size={32} className="text-rose-600 mx-auto" />
-        <h2 className="text-xl font-bold text-slate-800">Project Not Found</h2>
+        <h2 className="text-xl font-bold text-slate-800">
+          {isNotFound ? "Project Not Found" : "Unable to Load Project"}
+        </h2>
         <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          {error?.response?.data?.message || "The requested venture could not be loaded or does not belong to your account."}
+          {isNotFound
+            ? error?.response?.data?.message || "The requested venture could not be found or does not belong to your account."
+            : getApiErrorMessage(error, "Unable to reach the server to load this venture.")}
         </p>
-        <Button id="back-to-projects-error-btn" variant="secondary" onClick={onBack} className="text-xs">
-          <ArrowLeft size={14} /> Return to Projects
-        </Button>
+        <div className="flex items-center justify-center gap-2">
+          {!isNotFound && (
+            <Button variant="primary" size="sm" onClick={() => refetch()} className="text-xs bg-teal-700 hover:bg-teal-800">
+              <RefreshCw size={14} /> Retry
+            </Button>
+          )}
+          <Button id="back-to-projects-error-btn" variant="secondary" onClick={onBack} className="text-xs">
+            <ArrowLeft size={14} /> Return to Projects
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -185,7 +206,7 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
       setExportState((s) => ({ ...s, pdf: "error" }));
       setExportFeedback({
         type: "error",
-        message: err.response?.data?.message || err.message || "Failed to download PDF."
+        message: getApiErrorMessage(err, "Failed to download PDF.")
       });
       setTimeout(() => setExportState((s) => ({ ...s, pdf: "idle" })), 4000);
     }
@@ -206,7 +227,7 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
       setExportState((s) => ({ ...s, markdown: "error" }));
       setExportFeedback({
         type: "error",
-        message: err.response?.data?.message || err.message || "Failed to download Markdown."
+        message: getApiErrorMessage(err, "Failed to download Markdown.")
       });
       setTimeout(() => setExportState((s) => ({ ...s, markdown: "idle" })), 4000);
     }
@@ -227,7 +248,7 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
       setExportState((s) => ({ ...s, json: "error" }));
       setExportFeedback({
         type: "error",
-        message: err.response?.data?.message || err.message || "Failed to download JSON."
+        message: getApiErrorMessage(err, "Failed to download JSON.")
       });
       setTimeout(() => setExportState((s) => ({ ...s, json: "idle" })), 4000);
     }
@@ -244,7 +265,7 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
       setEmailFeedback(res.message || `Blueprint sent to ${emailInput.trim()}`);
     } catch (err) {
       setEmailStatus("error");
-      setEmailFeedback(err.response?.data?.message || err.message || "Email delivery failed.");
+      setEmailFeedback(getApiErrorMessage(err, "Email delivery failed."));
     }
   };
 
@@ -523,13 +544,29 @@ export default function ProjectPage({ onBack, onOpenBoardroom, onOpenAnalytics }
       )}
 
       {/* Mutation Error Feedback Banner */}
-      {runMutation.isError && (
+      {(runMutation.isError || approveMutation.isError || regenerateMutation.isError || updateReportMutation.isError) && (
         <div id="workflow-run-error" className="bg-rose-50 border border-rose-200 text-rose-800 text-xs p-3.5 rounded-xl flex items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2">
             <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
-            <span>Workflow Note: {runMutation.error?.response?.data?.message || runMutation.error?.message || "Execution encountered an issue."}</span>
+            <span>
+              Workflow Note:{" "}
+              {getApiErrorMessage(
+                runMutation.error || approveMutation.error || regenerateMutation.error || updateReportMutation.error,
+                "Execution encountered an issue."
+              )}
+            </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => runMutation.reset()} className="text-xs text-rose-700">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              runMutation.reset();
+              approveMutation.reset();
+              regenerateMutation.reset();
+              updateReportMutation.reset();
+            }}
+            className="text-xs text-rose-700"
+          >
             Dismiss
           </Button>
         </div>

@@ -37,6 +37,28 @@ function backendRunner() {
 
 export default defineConfig({
   plugins: [react(), backendRunner()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("recharts") || id.includes("d3-")) {
+            return "charts-vendor";
+          }
+          if (id.includes("react-flow-renderer")) {
+            return "flow-vendor";
+          }
+          if (id.includes("react-dom") || id.includes("/react/") || id.includes("\\react\\")) {
+            return "react-vendor";
+          }
+          if (id.includes("lucide-react")) {
+            return "icons-vendor";
+          }
+          return undefined;
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {

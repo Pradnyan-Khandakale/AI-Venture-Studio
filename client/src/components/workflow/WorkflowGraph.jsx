@@ -7,6 +7,8 @@ import ReactFlow, {
   Position,
   MarkerType
 } from "react-flow-renderer";
+import "react-flow-renderer/dist/style.css";
+import "react-flow-renderer/dist/theme-default.css";
 import {
   Clock,
   RefreshCw,

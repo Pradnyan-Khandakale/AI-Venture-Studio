@@ -417,8 +417,10 @@ export async function searchMemory(userId, query, options = {}) {
     userProjects = memory.listProjects(uid);
     userReports = memory.reports.filter((r) => String(r.user) === uid);
   } else {
-    userProjects = await Project.find({ user: uid }).lean();
-    userReports = await Report.find({ user: uid }).lean();
+    [userProjects, userReports] = await Promise.all([
+      Project.find({ user: uid }).lean(),
+      Report.find({ user: uid }).lean()
+    ]);
   }
 
   // Build lookup map for projects

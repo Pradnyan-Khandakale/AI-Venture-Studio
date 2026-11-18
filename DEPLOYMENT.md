@@ -163,13 +163,16 @@ You can deploy using Render's web interface or using the included `render.yaml` 
 Before deploying the frontend, verify the backend from your terminal:
 
 ```bash
-# 1. Health check
+# 1. Health check (lightweight liveness + DB readiness metadata)
 curl -s https://<your-render-api>.onrender.com/api/health
 
 # Expected response:
-# {"ok":true,"service":"ai-venture-studio","database":"mongodb","aiProvider":"gemini"}
+# {"ok":true,"ready":true,"service":"ai-venture-studio","database":"mongodb","aiProvider":"gemini","uptimeSeconds":12}
 
-# 2. Authentication test
+# 2. Readiness check (returns HTTP 200 when DB is ready, HTTP 503 if DB is unavailable)
+curl -s https://<your-render-api>.onrender.com/api/ready
+
+# 3. Authentication test
 curl -s -X POST https://<your-render-api>.onrender.com/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Founder","email":"test@example.com","password":"password123"}'

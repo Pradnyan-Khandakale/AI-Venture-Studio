@@ -30,7 +30,7 @@ import {
 import { Card } from "../components/ui/Card.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { Badge } from "../components/ui/Badge.jsx";
-import { analyticsApi, projectApi } from "../services/api.js";
+import { analyticsApi, getApiErrorMessage, projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
 const BAR_COLORS = [
@@ -51,10 +51,14 @@ export default function AnalyticsPage({ onOpenStudio }) {
   const { selectedProjectId } = useStudioStore();
   const [activeScope, setActiveScope] = useState(selectedProjectId || "overview");
 
-  // Fetch list of user's projects for project selector
-  const { data: projects = [] } = useQuery("projects", projectApi.list);
+  // Fetch list of user's projects for project selector (reuses React Query cache)
+  const { data: projects = [] } = useQuery("projects", projectApi.list, {
+    staleTime: 60 * 1000
+  });
 
-  // Fetch overview analytics
+  const isProjectScoped = activeScope !== "overview";
+
+  // Fetch overview analytics ONLY when viewing overview scope
   const {
     data: overviewData,
     isLoading: isOverviewLoading,
@@ -62,11 +66,11 @@ export default function AnalyticsPage({ onOpenStudio }) {
     error: overviewError,
     refetch: refetchOverview
   } = useQuery("analytics-overview", analyticsApi.overview, {
-    staleTime: 30000
+    enabled: !isProjectScoped,
+    staleTime: 60 * 1000
   });
 
-  // Fetch project-specific analytics if a specific project is selected
-  const isProjectScoped = activeScope !== "overview";
+  // Fetch project-specific analytics ONLY when a specific project is selected
   const {
     data: projectData,
     isLoading: isProjectLoading,
@@ -78,7 +82,7 @@ export default function AnalyticsPage({ onOpenStudio }) {
     () => analyticsApi.getProjectAnalytics(activeScope),
     {
       enabled: isProjectScoped,
-      staleTime: 30000
+      staleTime: 60 * 1000
     }
   );
 
@@ -277,8 +281,17 @@ export default function AnalyticsPage({ onOpenStudio }) {
       )}
 
       {isError && (
-        <Card className="p-8 text-center text-sm text-rose-600 bg-rose-50/50 border-rose-200">
-          Failed to load analytics: {errorObj?.response?.data?.message || errorObj?.message || "Server error"}
+        <Card className="p-8 text-center text-sm text-rose-600 bg-rose-50/50 border-rose-200 space-y-3">
+          <p>Failed to load analytics: {getApiErrorMessage(errorObj, "Unable to load analytics right now.")}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => (isProjectScoped ? refetchProject() : refetchOverview())}
+            className="text-xs"
+          >
+            <RefreshCw size={13} />
+            Retry
+          </Button>
         </Card>
       )}
 

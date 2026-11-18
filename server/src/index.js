@@ -1,10 +1,13 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import mongoose from "mongoose";
-import { connectDatabase } from "../config/database.js";
+import {
+  connectDatabase,
+  getDatabaseStatus,
+  scheduleDatabaseReconnect
+} from "../config/database.js";
+import { requireDatabaseReady } from "../middleware/databaseReady.js";
 import { errorHandler } from "../middleware/errorHandler.js";
-import { isMemoryMode } from "../services/inMemoryStore.js";
 import analyticsRoutes from "../routes/analyticsRoutes.js";
 import authRoutes from "../routes/authRoutes.js";
 import boardroomRoutes from "../routes/boardroomRoutes.js";
@@ -19,72 +22,126 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = Number(process.env.PORT) || 5000;
 
-// CORS configuration: Support CLIENT_URL (Vercel) and CORS_ORIGIN with development fallbacks
-const configuredOrigins = [
-  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
-  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : [])
-]
-  .map((s) => s.trim().replace(/\/+$/, ""))
-  .filter(Boolean);
+// Render runs behind a reverse proxy; trust the first proxy hop for accurate client IPs
+app.set("trust proxy", 1);
 
-const devOrigins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"];
+function normalizeOrigin(origin) {
+  return String(origin || "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "")
+    .replace(/\/+$/, "");
+}
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (curl, server-to-server, Render health checks)
-      if (!origin) return callback(null, true);
+function getAllowedOrigins() {
+  const raw = [
+    ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
+    ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : []),
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : [])
+  ];
+  return Array.from(new Set(raw.map(normalizeOrigin).filter(Boolean)));
+}
 
-      const isDev = process.env.NODE_ENV !== "production";
-      const normalizedOrigin = origin.replace(/\/+$/, "");
+const devOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
 
-      if (configuredOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, server-to-server, Render health checks)
+    if (!origin) return callback(null, true);
 
-      if (isDev && devOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
+    const isDev = process.env.NODE_ENV !== "production";
+    const normalizedOrigin = normalizeOrigin(origin);
+    const configuredOrigins = getAllowedOrigins();
 
-      // In development without explicit config, permit origin
-      if (isDev && configuredOrigins.length === 0) {
-        return callback(null, true);
-      }
+    if (configuredOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
 
-      return callback(new Error(`Origin ${origin} not allowed by CORS policy`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
-);
+    if (isDev && devOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    // In local development without explicit config, permit origin
+    if (isDev && configuredOrigins.length === 0) {
+      return callback(null, true);
+    }
+
+    console.warn(
+      `[CORS] Blocked origin "${normalizedOrigin}". Configured origins: [${configuredOrigins.join(", ") || "none"}]`
+    );
+    const corsError = new Error(`Origin ${origin} not allowed by CORS policy`);
+    corsError.status = 403;
+    return callback(corsError);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  exposedHeaders: ["Content-Disposition"],
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "2mb" }));
 
-// Root and Health check endpoints
+// Root and lightweight liveness / readiness endpoints (no DB queries or AI calls)
 app.get("/", (_req, res) => res.json({ ok: true, service: "ai-venture-studio" }));
 
 const healthHandler = (_req, res) => {
-  const isMongoConnected = !isMemoryMode() && mongoose.connection.readyState === 1;
+  const db = getDatabaseStatus();
+  res.setHeader("Cache-Control", "no-store");
   res.json({
     ok: true,
+    ready: db.ready,
     service: "ai-venture-studio",
-    database: isMongoConnected ? "mongodb" : "memory",
-    aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim()
+    database: db.mode,
+    aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim(),
+    uptimeSeconds: Math.floor(process.uptime())
+  });
+};
+
+const readyHandler = (_req, res) => {
+  const db = getDatabaseStatus();
+  res.setHeader("Cache-Control", "no-store");
+  if (!db.ready) {
+    scheduleDatabaseReconnect();
+    return res.status(503).json({
+      ok: false,
+      ready: false,
+      service: "ai-venture-studio",
+      database: db.mode,
+      state: db.state,
+      message: "Backend is starting up or waiting for database connectivity."
+    });
+  }
+
+  return res.json({
+    ok: true,
+    ready: true,
+    service: "ai-venture-studio",
+    database: db.mode,
+    aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim(),
+    uptimeSeconds: Math.floor(process.uptime())
   });
 };
 
 app.get(["/api/health", "/health"], healthHandler);
+app.get(["/api/ready", "/ready"], readyHandler);
 
-// Mount API routes
-app.use("/api/auth", authRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/boardroom", boardroomRoutes);
-app.use("/api/exports", exportRoutes);
-app.use("/api/memory", memoryRoutes);
-app.use("/api/analytics", analyticsRoutes);
+// Mount DB-backed API routes behind database readiness guard
+app.use("/api/auth", requireDatabaseReady, authRoutes);
+app.use("/api/projects", requireDatabaseReady, projectRoutes);
+app.use("/api/boardroom", requireDatabaseReady, boardroomRoutes);
+app.use("/api/exports", requireDatabaseReady, exportRoutes);
+app.use("/api/memory", requireDatabaseReady, memoryRoutes);
+app.use("/api/analytics", requireDatabaseReady, analyticsRoutes);
 
 // 404 handler for unmatched routes
 app.use((req, _res, next) => {
@@ -103,13 +160,32 @@ process.on("uncaughtException", (error) => {
   console.error("[Server UncaughtException]", error);
 });
 
-
 // Database connection & Server initialization
 export async function startServer() {
-  await connectDatabase();
+  const isProduction = process.env.NODE_ENV === "production";
+  const configuredOrigins = getAllowedOrigins();
+
+  if (isProduction && configuredOrigins.length === 0) {
+    console.warn(
+      "[CORS] WARNING: CLIENT_URL is not configured in production. Cross-origin browser requests from Vercel will be rejected until CLIENT_URL is set."
+    );
+  }
+
+  try {
+    await connectDatabase();
+  } catch (error) {
+    console.error("[Server] Initial database connection failed:", error?.message || error);
+    // Keep server alive to serve /api/health and explicit 503 readiness responses while retrying
+    scheduleDatabaseReconnect();
+  }
+
   const host = "0.0.0.0";
-  return app.listen(port, host, () => {
-    console.log(`[Server] AI Venture Studio running on http://${host}:${port} (NODE_ENV: ${process.env.NODE_ENV || "development"})`);
+  const listenPort = Number(process.env.PORT) || port;
+  return app.listen(listenPort, host, () => {
+    const db = getDatabaseStatus();
+    console.log(
+      `[Server] AI Venture Studio running on http://${host}:${listenPort} (NODE_ENV: ${process.env.NODE_ENV || "development"}, database: ${db.mode}, ready: ${db.ready})`
+    );
   });
 }
 
@@ -118,7 +194,10 @@ const isMain =
   (fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
     fileURLToPath(import.meta.url).toLowerCase() === path.resolve(process.argv[1]).toLowerCase());
 if (isMain) {
-  startServer();
+  startServer().catch((err) => {
+    console.error("[Server] Fatal startup error:", err);
+    process.exit(1);
+  });
 }
 
 export default app;

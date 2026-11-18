@@ -1,10 +1,10 @@
-import { CalendarClock, Plus, Search, Sparkles } from "lucide-react";
+import { CalendarClock, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { projectApi } from "../services/api";
+import { getApiErrorMessage, projectApi } from "../services/api";
 import { useStudioStore } from "../store/useStudioStore";
 
 const emptyIdea = {
@@ -22,7 +22,9 @@ export default function DashboardPage({ onOpenStudio }) {
   const queryClient = useQueryClient();
   const setSelectedProject = useStudioStore((state) => state.setSelectedProject);
 
-  const { data = [], isLoading, isError, error } = useQuery("projects", projectApi.list);
+  const { data = [], isLoading, isError, error, refetch } = useQuery("projects", projectApi.list, {
+    staleTime: 60 * 1000
+  });
 
   const createProject = useMutation(projectApi.create, {
     onSuccess: (newProject) => {
@@ -98,7 +100,7 @@ export default function DashboardPage({ onOpenStudio }) {
             </label>
             {createProject.isError && (
               <p id="create-project-error" className="sm:col-span-2 text-sm font-medium text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-md">
-                {createProject.error?.response?.data?.message || createProject.error?.message || "Project creation failed. Please check fields and retry."}
+                {getApiErrorMessage(createProject.error, "Project creation failed. Please check fields and retry.")}
               </p>
             )}
             <Button id="create-project-submit-btn" className="sm:col-span-2" disabled={createProject.isLoading}>
@@ -124,8 +126,12 @@ export default function DashboardPage({ onOpenStudio }) {
             </Card>
           )}
           {isError && (
-            <Card className="p-8 text-center text-sm text-rose-600 md:col-span-2 xl:col-span-3">
-              Failed to load projects: {error?.response?.data?.message || error?.message || "Server error"}
+            <Card className="p-8 text-center text-sm text-rose-600 md:col-span-2 xl:col-span-3 space-y-3">
+              <p>Failed to load projects: {getApiErrorMessage(error, "Unable to load your ventures right now.")}</p>
+              <Button variant="secondary" size="sm" onClick={() => refetch()} className="text-xs">
+                <RefreshCw size={13} />
+                Retry
+              </Button>
             </Card>
           )}
           {!isLoading && !isError && projectList.length === 0 && (

@@ -21,7 +21,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import { Button } from "../components/ui/Button.jsx";
 import { Card } from "../components/ui/Card.jsx";
 import { Badge } from "../components/ui/Badge.jsx";
-import { boardroomApi, projectApi } from "../services/api.js";
+import { boardroomApi, getApiErrorMessage, projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
 const ROLE_METADATA = {
@@ -77,23 +77,29 @@ export default function BoardroomPage({ onBack }) {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [activeRoleTab, setActiveRoleTab] = useState("all"); // "all" | "CEO" | "CTO" | "CFO" | "CMO" | "VC" | "Consensus"
 
-  // Fetch project details for venture context
+  // Fetch project details for venture context (reuses cached studio project)
   const { data: project } = useQuery(
     ["project", selectedProjectId],
     () => projectApi.get(selectedProjectId),
-    { enabled: Boolean(selectedProjectId) }
+    {
+      enabled: Boolean(selectedProjectId),
+      staleTime: 60 * 1000
+    }
   );
 
   // Fetch existing boardroom sessions for this venture
   const {
     data: sessions = [],
     isLoading: isLoadingSessions,
+    isError: isSessionsError,
+    error: sessionsError,
     refetch: refetchSessions
   } = useQuery(
     ["boardroomSessions", selectedProjectId],
     () => boardroomApi.listSessions(selectedProjectId),
     {
       enabled: Boolean(selectedProjectId),
+      staleTime: 60 * 1000,
       onSuccess: (data) => {
         if (data && data.length > 0 && !activeSessionId) {
           setActiveSessionId(data[0]._id || data[0].id);
@@ -201,7 +207,15 @@ export default function BoardroomPage({ onBack }) {
             </div>
 
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              {sessions.length === 0 ? (
+              {isSessionsError ? (
+                <div className="p-4 text-center text-xs text-rose-600 space-y-2">
+                  <p>{getApiErrorMessage(sessionsError, "Failed to load boardroom sessions.")}</p>
+                  <Button variant="secondary" size="sm" onClick={() => refetchSessions()} className="text-xs">
+                    <RefreshCw size={12} />
+                    Retry
+                  </Button>
+                </div>
+              ) : sessions.length === 0 ? (
                 <div className="p-4 text-center text-xs text-muted-foreground space-y-1">
                   <p>No boardroom debates yet.</p>
                   <p className="text-[11px] text-slate-400">Ask your first question to convene the council.</p>
@@ -354,7 +368,7 @@ export default function BoardroomPage({ onBack }) {
                 <ShieldAlert size={16} className="text-rose-600 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <strong>Boardroom Consultation Halted</strong>
-                  <p>{debateMutation.error?.response?.data?.message || debateMutation.error?.message || "Execution encountered an error."}</p>
+                  <p>{getApiErrorMessage(debateMutation.error, "Execution encountered an error.")}</p>
                   {debateMutation.error?.response?.status === 429 && (
                     <p className="text-[11px] text-amber-700">
                       Gemini API free-tier quota reached. Please wait a brief moment before submitting again.
@@ -469,7 +483,7 @@ export default function BoardroomPage({ onBack }) {
                   .map((msg) => {
                     const meta = ROLE_METADATA[msg.role] || {
                       title: msg.role,
-                      icon: UserCheck,
+                      icon: Users,
                       tone: "border-slate-200 bg-slate-50 text-slate-900",
                       badgeTone: "bg-slate-100 text-slate-800",
                       focus: "Executive Perspective"

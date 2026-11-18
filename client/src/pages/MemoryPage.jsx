@@ -11,13 +11,14 @@ import {
   Building2,
   FileText,
   Calendar,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from "lucide-react";
 import { useQuery } from "react-query";
 import { Card } from "../components/ui/Card.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { Badge } from "../components/ui/Badge.jsx";
-import { memoryApi, projectApi } from "../services/api.js";
+import { getApiErrorMessage, memoryApi, projectApi } from "../services/api.js";
 import { useStudioStore } from "../store/useStudioStore.js";
 
 const QUICK_SUGGESTIONS = [
@@ -53,8 +54,10 @@ export default function MemoryPage({ onOpenStudio }) {
   const [selectedAgentFilter, setSelectedAgentFilter] = useState("");
   const [previewItem, setPreviewItem] = useState(null);
 
-  // Fetch list of user's projects for project filter dropdown
-  const { data: projects = [] } = useQuery("projects", projectApi.list);
+  // Fetch list of user's projects for project filter dropdown (reuses React Query cache)
+  const { data: projects = [] } = useQuery("projects", projectApi.list, {
+    staleTime: 60 * 1000
+  });
 
   // Execute memory search with react-query
   const {
@@ -242,8 +245,12 @@ export default function MemoryPage({ onOpenStudio }) {
         )}
 
         {isError && (
-          <Card className="p-8 text-center text-sm text-rose-600">
-            Memory search encountered an issue: {error?.response?.data?.message || error?.message || "Server error"}
+          <Card className="p-8 text-center text-sm text-rose-600 space-y-3">
+            <p>Memory search encountered an issue: {getApiErrorMessage(error, "Unable to complete memory search.")}</p>
+            <Button variant="secondary" size="sm" onClick={() => refetch()} className="text-xs">
+              <RefreshCw size={13} />
+              Retry Search
+            </Button>
           </Card>
         )}
 
