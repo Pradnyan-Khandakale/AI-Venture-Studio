@@ -20,7 +20,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+// In local development, load server/.env if present. In production (Render), rely strictly on platform env vars.
+if (process.env.NODE_ENV !== "production") {
+  const localEnvPath = path.resolve(__dirname, "../.env");
+  if (fs.existsSync(localEnvPath)) {
+    dotenv.config({ path: localEnvPath });
+  }
+}
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
@@ -98,13 +104,16 @@ app.get("/", (_req, res) => res.json({ ok: true, service: "ai-venture-studio" })
 const healthHandler = (req, res) => {
   const db = getDatabaseStatus();
   res.setHeader("Cache-Control", "no-store");
-  console.log(`[Health] ${req.method} ${req.originalUrl} -> 200 (ready=${db.ready}, database=${db.mode}, state=${db.state})`);
+  console.log(
+    `[Health] ${req.method} ${req.originalUrl} -> 200 (ready=${db.ready}, database=${db.mode}, state=${db.state}${db.errorCode ? `, code=${db.errorCode}` : ""})`
+  );
   res.json({
     ok: true,
     ready: db.ready,
     service: "ai-venture-studio",
     database: db.mode,
     databaseState: db.state,
+    databaseErrorCode: db.errorCode,
     aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim(),
     uptimeSeconds: Math.floor(process.uptime())
   });
@@ -114,7 +123,9 @@ const readyHandler = (req, res) => {
   const db = getDatabaseStatus();
   res.setHeader("Cache-Control", "no-store");
   if (!db.ready) {
-    console.warn(`[Ready] ${req.method} ${req.originalUrl} -> 503 (database=${db.mode}, state=${db.state})`);
+    console.warn(
+      `[Ready] ${req.method} ${req.originalUrl} -> 503 (database=${db.mode}, state=${db.state}, code=${db.errorCode || "CONNECTING"})`
+    );
     scheduleDatabaseReconnect();
     return res.status(503).json({
       ok: false,
@@ -122,7 +133,8 @@ const readyHandler = (req, res) => {
       service: "ai-venture-studio",
       database: db.mode,
       state: db.state,
-      message: "Backend is online, but the database is not yet ready."
+      code: db.errorCode || "DATABASE_UNAVAILABLE",
+      message: db.publicMessage || "Backend is online, but the database is not yet ready."
     });
   }
 
