@@ -1,42 +1,69 @@
 import { create } from "zustand";
 
+function readStorage(key) {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Ignore storage quota/privacy restrictions
+  }
+}
+
+function removeStorage(key) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage restrictions
+  }
+}
+
+export function getStoredToken() {
+  const token = readStorage("avs_token");
+  return token && token !== "null" && token !== "undefined" ? token : null;
+}
+
 function getInitialAuth() {
-  const token = localStorage.getItem("avs_token");
-  const validToken = token && token !== "null" && token !== "undefined" ? token : null;
+  const token = getStoredToken();
   let user = null;
   try {
-    user = JSON.parse(localStorage.getItem("avs_user") || "null");
-  } catch (_e) {
+    user = JSON.parse(readStorage("avs_user") || "null");
+  } catch {
     user = null;
   }
   return {
-    token: validToken,
+    token,
     user,
-    isAuthenticated: Boolean(validToken && user)
+    isAuthenticated: Boolean(token && user)
   };
 }
 
 const initialAuth = getInitialAuth();
 
 export const useStudioStore = create((set) => ({
-  selectedProjectId: localStorage.getItem("avs_project_id") || null,
-  activeView: localStorage.getItem("avs_project_id") ? "studio" : "dashboard", // "dashboard" | "studio" | "boardroom" | "analytics" | "memory"
+  selectedProjectId: readStorage("avs_project_id") || null,
+  activeView: readStorage("avs_project_id") ? "studio" : "dashboard",
   setActiveView: (view) => set({ activeView: view }),
 
   auth: initialAuth,
-  // "verifying" when a stored token exists and needs /api/auth/me confirmation after backend wakes
-  authStatus: initialAuth.token ? "verifying" : "unauthenticated", // "verifying" | "authenticated" | "unauthenticated" | "error"
-  authError: null,
-
-  setAuthStatus: (authStatus, authError = null) => set({ authStatus, authError }),
 
   setSelectedProject: (p) => {
     const id = p?._id || p?.id || p || null;
     if (id) {
-      localStorage.setItem("avs_project_id", id);
+      writeStorage("avs_project_id", id);
       set({ selectedProjectId: id, activeView: "studio" });
     } else {
-      localStorage.removeItem("avs_project_id");
+      removeStorage("avs_project_id");
       set((state) => ({
         selectedProjectId: null,
         activeView: state.activeView === "studio" || state.activeView === "boardroom" ? "dashboard" : state.activeView
@@ -45,23 +72,19 @@ export const useStudioStore = create((set) => ({
   },
 
   setAuth: ({ token, user }) => {
-    if (token) localStorage.setItem("avs_token", token);
-    if (user) localStorage.setItem("avs_user", JSON.stringify(user));
+    if (token) writeStorage("avs_token", token);
+    if (user) writeStorage("avs_user", JSON.stringify(user));
     set({
-      auth: { token, user, isAuthenticated: Boolean(token && user) },
-      authStatus: token && user ? "authenticated" : "unauthenticated",
-      authError: null
+      auth: { token, user, isAuthenticated: Boolean(token && user) }
     });
   },
 
   logout: () => {
-    localStorage.removeItem("avs_token");
-    localStorage.removeItem("avs_user");
-    localStorage.removeItem("avs_project_id");
+    removeStorage("avs_token");
+    removeStorage("avs_user");
+    removeStorage("avs_project_id");
     set({
       auth: { token: null, user: null, isAuthenticated: false },
-      authStatus: "unauthenticated",
-      authError: null,
       selectedProjectId: null,
       activeView: "dashboard"
     });
@@ -71,9 +94,7 @@ export const useStudioStore = create((set) => ({
     const nextAuth = getInitialAuth();
     set({
       auth: nextAuth,
-      authStatus: nextAuth.token ? "verifying" : "unauthenticated",
-      authError: null,
-      selectedProjectId: localStorage.getItem("avs_project_id") || null
+      selectedProjectId: readStorage("avs_project_id") || null
     });
   }
 }));

@@ -15,7 +15,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { authApi, getApiErrorMessage } from "../services/api";
 import { waitForBackendReady } from "../services/backendLifecycle";
-import { useAppStore } from "../store/useAppStore";
+import { STARTUP_STATES, useAppStore } from "../store/useAppStore";
 import { useStudioStore } from "../store/useStudioStore";
 
 export default function AuthPage() {
@@ -23,23 +23,26 @@ export default function AuthPage() {
   const [form, setForm] = useState({ name: "", email: "founder@example.com", password: "password123" });
   const setAuth = useStudioStore((state) => state.setAuth);
   const {
-    backendStatus,
+    startupState,
+    backendReachable,
+    databaseReady,
     elapsedSeconds,
     error: backendError,
     sessionMessage,
     clearSessionMessage,
-    setHealthData
+    setStartupState
   } = useAppStore();
 
   const mutation = useMutation(
     async (formData) => {
-      // If the backend is currently waking up or not yet verified, wait for readiness first
-      // so the non-idempotent POST auth request doesn't hit a sleeping Render container.
-      if (backendStatus !== "ready") {
-        const ready = await waitForBackendReady({ force: backendStatus === "unavailable" });
-        if (!ready) {
+      // Ensure Render backend is reachable before sending non-idempotent POST auth request
+      if (!useAppStore.getState().backendReachable) {
+        const health = await waitForBackendReady({
+          force: useAppStore.getState().startupState === STARTUP_STATES.BACKEND_UNAVAILABLE
+        });
+        if (!health.reachable) {
           throw new Error(
-            useAppStore.getState().error ||
+            health.error ||
               "The server is still starting up or unreachable. Please retry in a moment."
           );
         }
@@ -54,10 +57,12 @@ export default function AuthPage() {
       onSuccess: (data) => {
         if (data?.token && data?.user) {
           clearSessionMessage();
-          if (useAppStore.getState().backendStatus !== "ready") {
-            setHealthData({ ok: true, ready: true });
-          }
           setAuth(data);
+          setStartupState(STARTUP_STATES.AUTHENTICATED, {
+            backendReachable: true,
+            databaseReady: true,
+            error: null
+          });
         }
       }
     }
@@ -81,8 +86,9 @@ export default function AuthPage() {
     }
   };
 
-  const isWaking = backendStatus === "waking";
-  const isUnavailable = backendStatus === "unavailable";
+  const isWaking = startupState === STARTUP_STATES.BACKEND_WAKING;
+  const isUnavailable = startupState === STARTUP_STATES.BACKEND_UNAVAILABLE;
+  const isDbDegraded = backendReachable && databaseReady === false;
 
   return (
     <main className="grid min-h-screen place-items-center px-4 py-10 bg-slate-50">
@@ -103,7 +109,7 @@ export default function AuthPage() {
                 Turn an early idea into an investor-ready blueprint.
               </h1>
               <p className="mt-4 max-w-lg text-sm leading-6 text-slate-300">
-                Secure JWT authentication backed by MongoDB Atlas and a 11-agent Gemini AI venture creation studio.
+                Secure JWT authentication backed by MongoDB Atlas and an 11-agent Gemini AI venture creation studio.
               </p>
             </div>
             <div className="rounded-lg bg-slate-900/80 p-3.5 border border-slate-800 text-xs space-y-1.5 text-slate-300">
@@ -165,6 +171,31 @@ export default function AuthPage() {
                   >
                     <RefreshCw size={12} />
                     Retry Connection
+                  </Button>
+                </div>
+              )}
+
+              {/* Express online, MongoDB still connecting / temporarily unavailable */}
+              {isDbDegraded && !isWaking && !isUnavailable && (
+                <div
+                  id="database-unavailable-banner"
+                  className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={15} className="text-amber-700 flex-shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      Server is online, but the database is still connecting or temporarily unavailable. Sign in may take a moment.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => waitForBackendReady({ force: true })}
+                    className="text-xs border-amber-200 text-amber-800 hover:bg-amber-100"
+                  >
+                    <RefreshCw size={12} />
+                    Re-check Status
                   </Button>
                 </div>
               )}

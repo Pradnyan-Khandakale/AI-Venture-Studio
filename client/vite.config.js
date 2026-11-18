@@ -42,7 +42,10 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("recharts") || id.includes("d3-")) {
+          if (id.includes("clsx") || id.includes("tailwind-merge")) {
+            return "react-vendor";
+          }
+          if (id.includes("recharts") || id.includes("victory-vendor") || id.includes("d3-")) {
             return "charts-vendor";
           }
           if (id.includes("react-flow-renderer")) {

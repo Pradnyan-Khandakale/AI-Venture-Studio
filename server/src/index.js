@@ -15,6 +15,7 @@ import exportRoutes from "../routes/exportRoutes.js";
 import memoryRoutes from "../routes/memoryRoutes.js";
 import projectRoutes from "../routes/projectRoutes.js";
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,23 +95,26 @@ app.use(express.json({ limit: "2mb" }));
 // Root and lightweight liveness / readiness endpoints (no DB queries or AI calls)
 app.get("/", (_req, res) => res.json({ ok: true, service: "ai-venture-studio" }));
 
-const healthHandler = (_req, res) => {
+const healthHandler = (req, res) => {
   const db = getDatabaseStatus();
   res.setHeader("Cache-Control", "no-store");
+  console.log(`[Health] ${req.method} ${req.originalUrl} -> 200 (ready=${db.ready}, database=${db.mode}, state=${db.state})`);
   res.json({
     ok: true,
     ready: db.ready,
     service: "ai-venture-studio",
     database: db.mode,
+    databaseState: db.state,
     aiProvider: (process.env.AI_PROVIDER || "gemini").toLowerCase().trim(),
     uptimeSeconds: Math.floor(process.uptime())
   });
 };
 
-const readyHandler = (_req, res) => {
+const readyHandler = (req, res) => {
   const db = getDatabaseStatus();
   res.setHeader("Cache-Control", "no-store");
   if (!db.ready) {
+    console.warn(`[Ready] ${req.method} ${req.originalUrl} -> 503 (database=${db.mode}, state=${db.state})`);
     scheduleDatabaseReconnect();
     return res.status(503).json({
       ok: false,
@@ -118,10 +122,11 @@ const readyHandler = (_req, res) => {
       service: "ai-venture-studio",
       database: db.mode,
       state: db.state,
-      message: "Backend is starting up or waiting for database connectivity."
+      message: "Backend is online, but the database is not yet ready."
     });
   }
 
+  console.log(`[Ready] ${req.method} ${req.originalUrl} -> 200 (database=${db.mode})`);
   return res.json({
     ok: true,
     ready: true,
@@ -171,29 +176,49 @@ export async function startServer() {
     );
   }
 
-  try {
-    await connectDatabase();
-  } catch (error) {
-    console.error("[Server] Initial database connection failed:", error?.message || error);
-    // Keep server alive to serve /api/health and explicit 503 readiness responses while retrying
-    scheduleDatabaseReconnect();
-  }
-
   const host = "0.0.0.0";
   const listenPort = Number(process.env.PORT) || port;
-  return app.listen(listenPort, host, () => {
-    const db = getDatabaseStatus();
-    console.log(
-      `[Server] AI Venture Studio running on http://${host}:${listenPort} (NODE_ENV: ${process.env.NODE_ENV || "development"}, database: ${db.mode}, ready: ${db.ready})`
-    );
+
+  // Bind HTTP port immediately so Render liveness checks (/api/health) never hang waiting on MongoDB
+  const server = await new Promise((resolve, reject) => {
+    const srv = app.listen(listenPort, host, () => {
+      const db = getDatabaseStatus();
+      console.log(
+        `[Server] AI Venture Studio listening on http://${host}:${listenPort} (NODE_ENV: ${process.env.NODE_ENV || "development"}, database: ${db.mode}, ready: ${db.ready})`
+      );
+      resolve(srv);
+    });
+    srv.on("error", reject);
   });
+
+  // Connect to MongoDB: non-blocking in production so Express responds immediately while DB connects;
+  // awaited in development/tests so local callers have DB initialized when startServer() resolves.
+  const dbConnectTask = connectDatabase().catch((error) => {
+    console.error("[Server] Initial database connection failed:", error?.message || error);
+    scheduleDatabaseReconnect();
+  });
+
+  if (!isProduction) {
+    await dbConnectTask;
+  }
+
+  return server;
 }
 
-const isMain =
-  process.argv[1] &&
-  (fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
-    fileURLToPath(import.meta.url).toLowerCase() === path.resolve(process.argv[1]).toLowerCase());
-if (isMain) {
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    const currentFile = fs.realpathSync(fileURLToPath(import.meta.url));
+    const entryFile = fs.realpathSync(path.resolve(process.argv[1]));
+    return currentFile === entryFile || currentFile.toLowerCase() === entryFile.toLowerCase();
+  } catch {
+    const currentFile = fileURLToPath(import.meta.url);
+    const entryFile = path.resolve(process.argv[1]);
+    return currentFile === entryFile || currentFile.toLowerCase() === entryFile.toLowerCase();
+  }
+}
+
+if (isMainModule()) {
   startServer().catch((err) => {
     console.error("[Server] Fatal startup error:", err);
     process.exit(1);

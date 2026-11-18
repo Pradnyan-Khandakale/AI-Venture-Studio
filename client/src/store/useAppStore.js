@@ -1,51 +1,68 @@
 import { create } from "zustand";
 
+export const STARTUP_STATES = {
+  CHECKING_BACKEND: "checking_backend",
+  BACKEND_WAKING: "backend_waking",
+  BACKEND_UNAVAILABLE: "backend_unavailable",
+  CHECKING_SESSION: "checking_session",
+  AUTHENTICATED: "authenticated",
+  UNAUTHENTICATED: "unauthenticated",
+  SESSION_ERROR: "session_error"
+};
+
 export const useAppStore = create((set) => ({
-  backendStatus: "idle", // "idle" | "checking" | "waking" | "ready" | "unavailable"
+  // Single finite startup state machine (prevents split-brain loading deadlocks)
+  startupState: STARTUP_STATES.CHECKING_BACKEND,
+  backendReachable: false,
+  databaseReady: null,
   databaseMode: null,
   healthData: null,
-  isLoadingHealth: false,
   attempt: 0,
   elapsedSeconds: 0,
   error: null,
   apiConfigWarning: null,
   sessionMessage: null,
 
-  setChecking: () =>
-    set({
-      backendStatus: "checking",
-      isLoadingHealth: true,
-      error: null
-    }),
+  setStartupState: (startupState, patch = {}) =>
+    set((state) => ({
+      ...state,
+      startupState,
+      ...patch
+    })),
 
-  setWaking: ({ attempt = 1, elapsedSeconds = 0 } = {}) =>
-    set({
-      backendStatus: "waking",
-      isLoadingHealth: true,
-      attempt,
-      elapsedSeconds,
-      error: null
-    }),
+  setElapsedSeconds: (elapsedSeconds) => set({ elapsedSeconds }),
 
   setHealthData: (data) =>
-    set({
-      backendStatus: data?.ok && data?.ready !== false ? "ready" : "waking",
+    set((state) => ({
+      ...state,
+      backendReachable: Boolean(data?.ok),
+      databaseReady: data?.ok ? data?.ready !== false : false,
       databaseMode: data?.database || null,
-      healthData: data,
-      isLoadingHealth: !(data?.ok && data?.ready !== false),
-      error: null
-    }),
+      healthData: data || null
+    })),
 
-  setHealthError: (error) =>
-    set({
-      backendStatus: "unavailable",
-      isLoadingHealth: false,
-      error: typeof error === "string" ? error : error?.userMessage || error?.message || "Failed to reach backend",
-      healthData: null
-    }),
-
-  setIsLoadingHealth: (isLoadingHealth) => set({ isLoadingHealth }),
   setApiConfigWarning: (apiConfigWarning) => set({ apiConfigWarning }),
   setSessionMessage: (sessionMessage) => set({ sessionMessage }),
-  clearSessionMessage: () => set({ sessionMessage: null })
+  clearSessionMessage: () => set({ sessionMessage: null }),
+
+  enterLoginView: () =>
+    set((state) => ({
+      ...state,
+      startupState: STARTUP_STATES.UNAUTHENTICATED,
+      error: null
+    })),
+
+  resetForTests: () =>
+    set({
+      startupState: STARTUP_STATES.CHECKING_BACKEND,
+      backendReachable: false,
+      databaseReady: null,
+      databaseMode: null,
+      healthData: null,
+      attempt: 0,
+      elapsedSeconds: 0,
+      error: null,
+      apiConfigWarning: null,
+      sessionMessage: null
+    })
 }));

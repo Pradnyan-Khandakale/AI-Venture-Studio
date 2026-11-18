@@ -118,6 +118,9 @@ export async function connectDatabase() {
   const timeoutMs = isProduction ? 10000 : 3000;
 
   connectPromise = (async () => {
+    console.log(
+      `[Database] Connecting to MongoDB (${isProduction ? "Production/Atlas" : "Local"}, timeout=${timeoutMs}ms)...`
+    );
     try {
       await mongoose.connect(uri || "mongodb://127.0.0.1:27017/ai-venture-studio", {
         serverSelectionTimeoutMS: timeoutMs,
@@ -130,7 +133,10 @@ export async function connectDatabase() {
       console.log(
         `[Database] Connected to MongoDB successfully. Mode: mongodb (${isProduction ? "Production/Atlas" : "Local"})`
       );
-      await seedDemoUser();
+      // Seed demo user without blocking readiness if DB is already live
+      seedDemoUser().catch((seedErr) => {
+        console.warn("[Database] Demo user seed skipped:", seedErr?.message || seedErr);
+      });
       return mongoose.connection;
     } catch (error) {
       lastDatabaseError = error?.message || "Failed to connect to MongoDB";

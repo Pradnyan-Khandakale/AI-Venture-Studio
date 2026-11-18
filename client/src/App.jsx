@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Database,
   LayoutDashboard,
+  LogIn,
   LogOut,
   RefreshCw,
   Server,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "react-query";
 import AuthPage from "./pages/AuthPage.jsx";
-import { useAppStore } from "./store/useAppStore.js";
+import { STARTUP_STATES, useAppStore } from "./store/useAppStore.js";
 import { useStudioStore } from "./store/useStudioStore.js";
 import { initializeApplication } from "./services/backendLifecycle.js";
 import { Button } from "./components/ui/Button.jsx";
@@ -35,12 +36,29 @@ function PageLoader({ label = "Loading workspace..." }) {
   );
 }
 
+const LOADING_STATE_COPY = {
+  [STARTUP_STATES.CHECKING_BACKEND]: {
+    title: "Checking server connection...",
+    description: "Verifying that the AI Venture Studio backend is online.",
+    badge: "checking_backend"
+  },
+  [STARTUP_STATES.BACKEND_WAKING]: {
+    title: "Starting the server. This may take a moment.",
+    description:
+      "The Render backend is waking up from sleep. Your session is preserved and your workspace will load automatically once the server responds.",
+    badge: "backend_waking"
+  },
+  [STARTUP_STATES.CHECKING_SESSION]: {
+    title: "Restoring your session...",
+    description: "Server is online. Confirming your saved credentials with /api/auth/me.",
+    badge: "checking_session"
+  }
+};
+
 export default function App() {
   const queryClient = useQueryClient();
   const {
     auth,
-    authStatus,
-    authError,
     logout,
     selectedProjectId,
     setSelectedProject,
@@ -49,17 +67,19 @@ export default function App() {
   } = useStudioStore();
 
   const {
-    backendStatus,
+    startupState,
     elapsedSeconds,
-    error: backendError
+    attempt,
+    error: startupError,
+    enterLoginView
   } = useAppStore();
 
-  // Single deduplicated startup probe + session verification on mount
+  // Single deduplicated startup sequence on mount (StrictMode safe)
   useEffect(() => {
     initializeApplication();
   }, []);
 
-  // Ensure cached user data is purged whenever the user signs out
+  // Purge cached user data whenever the user signs out
   useEffect(() => {
     if (!auth.token) {
       queryClient.clear();
@@ -68,23 +88,29 @@ export default function App() {
 
   const handleLogout = () => {
     logout();
+    useAppStore.getState().setStartupState(STARTUP_STATES.UNAUTHENTICATED, { error: null });
     queryClient.clear();
   };
 
-  // Unauthenticated users go directly to AuthPage (which displays cold-start status if needed)
-  if (!auth.token) {
+  const handleRetryStartup = () => {
+    initializeApplication({ force: true });
+  };
+
+  // Rule: Do not require authentication or MongoDB readiness to display the login page.
+  // If there is no saved token, or the user is explicitly in the unauthenticated state, show AuthPage immediately.
+  if (!auth.token || startupState === STARTUP_STATES.UNAUTHENTICATED) {
     return <AuthPage />;
   }
 
-  // Returning user with stored token: wait for Render backend readiness & /api/auth/me verification
-  const isBootstrappingSession =
-    backendStatus === "idle" ||
-    backendStatus === "checking" ||
-    backendStatus === "waking" ||
-    authStatus === "verifying";
+  // Active bounded startup progress states (ONLY reached when a saved token exists)
+  if (
+    startupState === STARTUP_STATES.CHECKING_BACKEND ||
+    startupState === STARTUP_STATES.BACKEND_WAKING ||
+    startupState === STARTUP_STATES.CHECKING_SESSION
+  ) {
+    const isWaking = startupState === STARTUP_STATES.BACKEND_WAKING;
+    const copy = LOADING_STATE_COPY[startupState];
 
-  if (isBootstrappingSession) {
-    const isWaking = backendStatus === "waking";
     return (
       <main className="grid min-h-screen place-items-center bg-slate-50 px-4 py-10 font-sans">
         <Card className="w-full max-w-md p-8 text-center space-y-4 shadow-lg border-slate-200">
@@ -92,27 +118,47 @@ export default function App() {
             {isWaking ? <Server size={22} className="animate-pulse" /> : <RefreshCw size={22} className="animate-spin" />}
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-bold text-slate-900">
-              {isWaking ? "Starting the server. This may take a moment." : "Restoring your workspace..."}
+            <h2 id="startup-status-heading" className="text-lg font-bold text-slate-900">
+              {copy.title}
             </h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              {isWaking
-                ? "The backend is waking up from sleep. Your session is preserved and your ventures will load automatically as soon as the server responds."
-                : "Verifying server readiness and authenticating your session."}
-            </p>
+            <p className="text-xs text-slate-600 leading-relaxed">{copy.description}</p>
           </div>
-          {isWaking && elapsedSeconds > 0 && (
-            <p className="text-[11px] font-mono text-slate-400">
-              Waiting for server response ({elapsedSeconds}s elapsed)...
+
+          <div className="text-[11px] font-mono text-slate-500 bg-slate-100 rounded-lg px-3 py-2 space-y-0.5">
+            <p>
+              Status: <span className="font-semibold text-slate-700">{copy.badge}</span>
+              {elapsedSeconds > 0 ? ` • ${elapsedSeconds}s elapsed` : ""}
             </p>
+            {isWaking && attempt > 1 && <p>Health check attempt #{attempt}</p>}
+          </div>
+
+          {elapsedSeconds >= 5 && (
+            <div className="pt-1 flex items-center justify-center gap-2">
+              <Button
+                id="startup-continue-login-btn"
+                variant="secondary"
+                size="sm"
+                onClick={enterLoginView}
+                className="text-xs"
+              >
+                <LogIn size={13} />
+                Continue to Login
+              </Button>
+            </div>
           )}
         </Card>
       </main>
     );
   }
 
-  // Recoverable backend / session verification failure (token is preserved — NOT cleared)
-  if (backendStatus === "unavailable" || authStatus === "error" || !auth.user) {
+  // Terminal recoverable error states (token is PRESERVED — never wiped on timeout/503/network failure)
+  if (
+    startupState === STARTUP_STATES.BACKEND_UNAVAILABLE ||
+    startupState === STARTUP_STATES.SESSION_ERROR ||
+    !auth.user
+  ) {
+    const isSessionErr = startupState === STARTUP_STATES.SESSION_ERROR;
+
     return (
       <main className="grid min-h-screen place-items-center bg-slate-50 px-4 py-10 font-sans">
         <Card className="w-full max-w-md p-8 text-center space-y-4 shadow-lg border-slate-200">
@@ -120,21 +166,42 @@ export default function App() {
             <AlertCircle size={24} />
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-bold text-slate-900">Unable to Reach Server</h2>
+            <h2 id="startup-error-heading" className="text-lg font-bold text-slate-900">
+              {isSessionErr ? "Could Not Restore Session" : "Server Temporarily Unavailable"}
+            </h2>
             <p className="text-xs text-slate-600 leading-relaxed">
-              {backendError || authError || "The server is temporarily unavailable. Your session has been preserved."}
+              {startupError ||
+                (isSessionErr
+                  ? "The server is online, but we could not verify your session right now. Your saved token has been preserved."
+                  : "The backend server did not respond in time. Your session has been preserved.")}
             </p>
           </div>
-          <div className="flex items-center justify-center gap-2 pt-2">
+
+          <div className="text-[11px] font-mono text-slate-500 bg-slate-100 rounded-lg px-3 py-1.5">
+            State: <span className="font-semibold text-slate-700">{startupState}</span>
+            {elapsedSeconds > 0 ? ` • Waited ${elapsedSeconds}s` : ""}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
             <Button
               id="retry-connection-btn"
               variant="primary"
               size="sm"
-              onClick={() => initializeApplication({ force: true })}
+              onClick={handleRetryStartup}
               className="text-xs bg-teal-700 hover:bg-teal-800"
             >
               <RefreshCw size={14} />
-              Retry Connection
+              Retry
+            </Button>
+            <Button
+              id="continue-to-login-btn"
+              variant="secondary"
+              size="sm"
+              onClick={enterLoginView}
+              className="text-xs"
+            >
+              <LogIn size={14} />
+              Continue to Login
             </Button>
             <Button
               id="signout-fallback-btn"
@@ -152,6 +219,7 @@ export default function App() {
     );
   }
 
+  // startupState === STARTUP_STATES.AUTHENTICATED
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-6">

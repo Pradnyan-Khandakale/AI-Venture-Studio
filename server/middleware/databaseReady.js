@@ -4,13 +4,16 @@ import { getDatabaseStatus, scheduleDatabaseReconnect } from "../config/database
  * Ensures requests that require database access do not silently hang or fail
  * with misleading errors when MongoDB is unavailable.
  */
-export function requireDatabaseReady(_req, res, next) {
+export function requireDatabaseReady(req, res, next) {
   const status = getDatabaseStatus();
 
   if (status.ready) {
     return next();
   }
 
+  console.warn(
+    `[DatabaseGuard] ${req.method} ${req.originalUrl} -> 503 DATABASE_UNAVAILABLE (mode=${status.mode}, state=${status.state})`
+  );
   scheduleDatabaseReconnect();
 
   return res.status(503).json({

@@ -1,22 +1,32 @@
 import axios from "axios";
-import { useAppStore } from "../store/useAppStore.js";
-import { useStudioStore } from "../store/useStudioStore.js";
+import { STARTUP_STATES, useAppStore } from "../store/useAppStore.js";
+import { getStoredToken, useStudioStore } from "../store/useStudioStore.js";
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const HEALTH_TIMEOUT_MS = 8000;
+const AUTH_ME_TIMEOUT_MS = 10000;
 const EXPORT_TIMEOUT_MS = 60000;
 const AI_EXECUTION_TIMEOUT_MS = 120000;
 const MAX_SAFE_GET_RETRIES = 2;
 
 const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
 
+function getEnv() {
+  try {
+    return (typeof import.meta !== "undefined" && import.meta.env) || {};
+  } catch {
+    return {};
+  }
+}
+
 function isLocalhostUrl(url) {
   return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(url);
 }
 
-export function resolveApiBaseUrl() {
-  const isProd = Boolean(import.meta.env.PROD);
-  const raw = String(import.meta.env.VITE_API_URL || "").trim().replace(/^['"]|['"]$/g, "");
+export function resolveApiBaseUrl(envOverride) {
+  const env = envOverride || getEnv();
+  const isProd = Boolean(env.PROD);
+  const raw = String(env.VITE_API_URL || "").trim().replace(/^['"]|['"]$/g, "");
 
   if (!raw) {
     if (isProd) {
@@ -47,7 +57,7 @@ export function resolveApiBaseUrl() {
         return `${trimmed}/api`;
       }
       return trimmed;
-    } catch (_err) {
+    } catch {
       return trimmed;
     }
   }
@@ -59,7 +69,8 @@ export const API_BASE_URL = resolveApiBaseUrl();
 
 export function isTransientError(error) {
   if (!error) return false;
-  if (axios.isCancel(error) || error.code === "ERR_CANCELED") return false;
+  if (error.isConfigError) return false;
+  if (error.code === "ERR_CANCELED" && !error.isTimeoutAbort) return false;
 
   // Network drop, DNS/TLS glitch, CORS-masked Render 502/503, or timeout
   if (!error.response) {
@@ -82,8 +93,12 @@ export function getApiErrorMessage(error, fallback = "Something went wrong. Plea
     return responseMessage;
   }
 
-  if (error.code === "ECONNABORTED" || String(error.message || "").toLowerCase().includes("timeout")) {
-    return "The server took too long to respond. If the backend is waking up, please wait a moment and try again.";
+  if (
+    error.isTimeoutAbort ||
+    error.code === "ECONNABORTED" ||
+    String(error.message || "").toLowerCase().includes("timeout")
+  ) {
+    return "The server took too long to respond. If the backend is waking up on Render, please wait a moment and try again.";
   }
 
   if (!error.response || error.code === "ERR_NETWORK" || error.message === "Network Error") {
@@ -105,10 +120,10 @@ export function getApiErrorMessage(error, fallback = "Something went wrong. Plea
     return "Your session has expired. Please sign in again.";
   }
   if (status === 403) {
-    return "You do not have permission to perform this action.";
+    return "Access was blocked by the server (403). Verify that CLIENT_URL on Render matches your Vercel domain.";
   }
   if (status === 404) {
-    return "The requested resource could not be found.";
+    return "The requested API endpoint could not be found (404).";
   }
 
   return error.message || fallback;
@@ -124,17 +139,19 @@ const api = axios.create({
 
 // Request interceptor: guard misconfigured prod URL & attach Authorization Bearer token
 api.interceptors.request.use((config) => {
-  if (import.meta.env.PROD && !API_BASE_URL) {
+  const env = getEnv();
+  if (env.PROD && !API_BASE_URL) {
     const err = new Error(
       useAppStore.getState().apiConfigWarning ||
         "Production VITE_API_URL is misconfigured and cannot target localhost."
     );
     err.userMessage = err.message;
+    err.isConfigError = true;
     return Promise.reject(err);
   }
 
-  const token = localStorage.getItem("avs_token");
-  if (token && token !== "null" && token !== "undefined") {
+  const token = getStoredToken();
+  if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -174,8 +191,9 @@ api.interceptors.response.use(
       config?.url?.includes("/auth/login") || config?.url?.includes("/auth/register");
 
     if (error?.response?.status === 401 && !isAuthAttempt) {
-      const hadToken = Boolean(localStorage.getItem("avs_token"));
+      const hadToken = Boolean(getStoredToken());
       useStudioStore.getState().logout();
+      useAppStore.getState().setStartupState(STARTUP_STATES.UNAUTHENTICATED, { error: null });
       if (hadToken) {
         useAppStore
           .getState()
@@ -194,28 +212,68 @@ api.interceptors.response.use(
   }
 );
 
-// Lightweight health & readiness endpoints (cold-start manager owns retries via _skipRetry)
-export const getHealth = async () => {
-  const response = await api.get("/health", {
-    timeout: HEALTH_TIMEOUT_MS,
-    _skipRetry: true
-  });
-  return response.data;
+function assertJsonObjectResponse(data, endpointName) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    const err = new Error(
+      `Unexpected non-JSON response from ${endpointName}. Verify VITE_API_URL points to your Render backend API.`
+    );
+    err.userMessage = err.message;
+    err.isConfigError = true;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * Executes a GET request with BOTH Axios timeout AND AbortController hard timeout,
+ * ensuring sockets cannot hang past timeoutMs in any browser/proxy environment.
+ */
+async function getWithStrictTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  let didAbortForTimeout = false;
+  const timer = setTimeout(() => {
+    didAbortForTimeout = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await api.get(url, {
+      timeout: timeoutMs,
+      signal: controller.signal,
+      _skipRetry: true
+    });
+    return response.data;
+  } catch (error) {
+    if (didAbortForTimeout) {
+      error.isTimeoutAbort = true;
+      error.code = "ECONNABORTED";
+      error.userMessage = getApiErrorMessage(error);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Lightweight health & readiness endpoints (cold-start state machine owns bounded retries)
+export const getHealth = async ({ timeout = HEALTH_TIMEOUT_MS } = {}) => {
+  const data = await getWithStrictTimeout("/health", timeout);
+  return assertJsonObjectResponse(data, "/api/health");
 };
 
-export const getReady = async () => {
-  const response = await api.get("/ready", {
-    timeout: HEALTH_TIMEOUT_MS,
-    _skipRetry: true
-  });
-  return response.data;
+export const getReady = async ({ timeout = HEALTH_TIMEOUT_MS } = {}) => {
+  const data = await getWithStrictTimeout("/ready", timeout);
+  return assertJsonObjectResponse(data, "/api/ready");
 };
 
 // Phase 2: Authentication API
 export const authApi = {
   register: (payload) => api.post("/auth/register", payload).then((res) => res.data),
   login: (payload) => api.post("/auth/login", payload).then((res) => res.data),
-  me: () => api.get("/auth/me").then((res) => res.data)
+  me: async ({ timeout = AUTH_ME_TIMEOUT_MS } = {}) => {
+    const data = await getWithStrictTimeout("/auth/me", timeout);
+    return assertJsonObjectResponse(data, "/api/auth/me");
+  }
 };
 
 export const projectApi = {
